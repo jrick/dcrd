@@ -151,7 +151,7 @@ type config struct {
 	RPCKey               string   `long:"rpckey" description:"File containing the certificate key"`
 	TLSCurve             string   `long:"tlscurve" description:"Curve to use when generating TLS keypairs"`
 	AltDNSNames          []string `long:"altdnsnames" description:"Specify additional DNS names to use when generating the RPC server certificate" env:"DCRD_ALT_DNSNAMES" env-delim:","`
-	DisableTLS           bool     `long:"notls" description:"Disable TLS for the RPC server -- NOTE: This is only allowed if the RPC server is bound to localhost"`
+	DisableTLS           bool     `long:"notls" description:"Disable TLS for the RPC server"`
 	RPCMaxClients        int      `long:"rpcmaxclients" description:"Max number of RPC clients for standard connections"`
 	RPCMaxWebsockets     int      `long:"rpcmaxwebsockets" description:"Max number of RPC websocket connections"`
 	RPCMaxConcurrentReqs int      `long:"rpcmaxconcurrentreqs" description:"Max number of concurrent RPC requests that may be processed concurrently"`
@@ -1137,34 +1137,11 @@ func loadConfig(appName string) (*config, []string, error) {
 
 	// Only allow TLS to be disabled if the RPC is bound to localhost
 	// addresses, and when client cert auth is not used.
-	if !cfg.DisableRPC && cfg.DisableTLS {
-		allowedTLSListeners := map[string]struct{}{
-			"localhost": {},
-			"127.0.0.1": {},
-			"::1":       {},
-		}
-		for _, addr := range cfg.RPCListeners {
-			host, _, err := net.SplitHostPort(addr)
-			if err != nil {
-				str := "%s: RPC listen interface '%s' is " +
-					"invalid: %w"
-				err := fmt.Errorf(str, funcName, addr, err)
-				return nil, nil, err
-			}
-			if _, ok := allowedTLSListeners[host]; !ok {
-				str := "%s: the --notls option may not be used " +
-					"when binding RPC to non localhost " +
-					"addresses: %s"
-				err := fmt.Errorf(str, funcName, addr)
-				return nil, nil, err
-			}
-		}
-
-		if cfg.RPCAuthType == authTypeClientCert {
-			err := fmt.Errorf("%s: TLS may not be disabled with "+
-				"authtype=clientcert", funcName)
-			return nil, nil, err
-		}
+	if !cfg.DisableRPC && cfg.DisableTLS && cfg.RPCAuthType ==
+		authTypeClientCert {
+		err := fmt.Errorf("%s: TLS may not be disabled with "+
+			"authtype=clientcert", funcName)
+		return nil, nil, err
 	}
 
 	// Add default port to all added peer addresses if needed and remove
