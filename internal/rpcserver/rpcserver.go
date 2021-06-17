@@ -6061,10 +6061,10 @@ func (s *Server) route(ctx context.Context) *http.Server {
 			return
 		}
 		ws.SetPingHandler(func(payload string) error {
-			err := ws.WriteControl(websocket.PongMessage, []byte(payload),
-				time.Now().Add(time.Second))
 			log.Debugf("ping received: len %d", len(payload))
 			log.Tracef("ping payload: %s", payload)
+			err := ws.WriteControl(websocket.PongMessage, []byte(payload),
+				time.Now().Add(10*time.Second))
 			if err != nil {
 				log.Errorf("Failed to send pong: %v", err)
 				return err
