@@ -3,6 +3,8 @@ module github.com/decred/dcrd
 go 1.17
 
 require (
+	decred.org/cspp/v2 v2.0.0
+	github.com/companyzero/sntrup4591761 v0.0.0-20220309191932-9e0f3af2f07a
 	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/base58 v1.0.4
 	github.com/decred/dcrd/addrmgr/v2 v2.0.0
@@ -48,6 +50,7 @@ require (
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2 // indirect
 	github.com/decred/dcrd/hdkeychain/v3 v3.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
+	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 )
 
 replace (

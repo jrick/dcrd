@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/decred/dcrd/chaincfg/chainhash"
+	"github.com/decred/dcrd/mixing"
 )
 
 // MessageHeaderSize is the number of bytes in a Decred message header.
@@ -58,6 +60,19 @@ const (
 	CmdCFilterV2      = "cfilterv2"
 	CmdGetInitState   = "getinitstate"
 	CmdInitState      = "initstate"
+
+	// Wire sits at the bottom of the dependency graph, so try
+	// not exposing these in public api just yet.
+	// To avoid this, we do have a module and import dependency on mixing.
+	// The types and their wire implementation exist in the mixing package,
+	// and wire calls mixing.MakeEmptyMessage to construct the
+	// interface-implementing types.
+	cmdMixPR = "mix-PR" // pair request
+	cmdMixKE = "mix-KE" // key exchange
+	cmdMixCT = "mix-CT" // pq ciphertexts
+	cmdMixSR = "mix-SR" // slot reservation mix
+	cmdMixDC = "mix-DC" // xor dc-net mix
+	cmdMixCM = "mix-CM" // confirm a mix with our signatures
 )
 
 // Message is an interface that describes a Decred message.  A type that
@@ -77,6 +92,12 @@ func makeEmptyMessage(command string) (Message, error) {
 	const op = "makeEmptyMessage"
 
 	var msg Message
+
+	if strings.HasPrefix(command, "mix-") {
+		msg = mixing.MakeEmptyMessage(command)
+		goto Done
+	}
+
 	switch command {
 	case CmdVersion:
 		msg = &MsgVersion{}
@@ -167,8 +188,10 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdInitState:
 		msg = &MsgInitState{}
+	}
 
-	default:
+Done:
+	if msg == nil {
 		str := fmt.Sprintf("unhandled command [%s]", command)
 		return nil, messageError(op, ErrUnknownCmd, str)
 	}

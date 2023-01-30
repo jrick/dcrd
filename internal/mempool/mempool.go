@@ -20,6 +20,7 @@ import (
 	"github.com/decred/dcrd/internal/blockchain"
 	"github.com/decred/dcrd/internal/blockchain/indexers"
 	"github.com/decred/dcrd/internal/mining"
+	"github.com/decred/dcrd/mixing"
 	"github.com/decred/dcrd/txscript/v4"
 	"github.com/decred/dcrd/wire"
 )
@@ -235,6 +236,21 @@ type orphanTx struct {
 	expiration time.Time
 }
 
+// MixMessage records a peer-to-peer mixing message.  Similarly to transactions,
+// these propagate the network through the inv system.  Unlike transactions,
+// unlimited memory resources are not available to record these; this would
+// introduce a trivial DoS given enough
+//
+// XXX: MixMessages should be removed from the mixpool after mixes complete or
+// are abandoned.  It's difficult to determine when this should occur, and so we
+// have a memory leak currently.  Dcrd could watch for successful mixes and
+// remove the messages for these, but we also need a solution for the
+// errored/abandoned cases.
+type MixMessage struct {
+	Hash    chainhash.Hash // Hash of message's wire-encoding, signatures included.
+	Message mixing.Message
+}
+
 // TxPool is used as a source of transactions that need to be mined into blocks
 // and relayed to other peers.  It is safe for concurrent access from multiple
 // peers.
@@ -268,6 +284,9 @@ type TxPool struct {
 	// the scan will only run when an orphan is added to the pool as opposed
 	// to on an unconditional timer.
 	nextExpireScan time.Time
+
+	mixmtx  sync.RWMutex
+	mixpool map[chainhash.Hash]*MixMessage
 }
 
 // insertVote inserts a vote into the map of block votes.
