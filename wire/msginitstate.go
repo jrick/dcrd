@@ -33,6 +33,7 @@ type MsgInitState struct {
 	BlockHashes  []chainhash.Hash
 	VoteHashes   []chainhash.Hash
 	TSpendHashes []chainhash.Hash
+	MixPRHashes  []chainhash.Hash // XXX serialize this depending on the protocol version
 }
 
 // AddBlockHash adds a new block hash to the message. Up to

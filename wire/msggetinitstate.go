@@ -29,6 +29,10 @@ const (
 	// InitStateTSpends is the init state type used to request tpends for
 	// voting.
 	InitStateTSpends = "tspends"
+
+	// InitStateMixPRs is the init state type used to request mixing pair
+	// request messages.
+	InitStateMixPRs = "mixprs"
 )
 
 // MsgGetInitState implements the Message interface and represents a

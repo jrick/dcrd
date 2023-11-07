@@ -133,6 +133,18 @@ const (
 	// ErrTooManyTSpends is returned when the number of tspend hashes
 	// exceeds the maximum allowed.
 	ErrTooManyTSpends
+
+	// ErrMixPRScriptClassTooLong is returned when a mixing script class
+	// type string is longer than allowed by the protocol.
+	ErrMixPRScriptClassTooLong
+
+	// ErrTooManyMixPRUTXOs is returned when a MixPR message contains
+	// more UTXOs than allowed by the protocol.
+	ErrTooManyMixPRUTXOs
+
+	// ErrTooManyPrevMixMsgs is returned when too many previous messages of
+	// a mix run are referenced by a message.
+	ErrTooManyPrevMixMsgs
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -168,6 +180,9 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrTooManyInitStateTypes:         "ErrTooManyInitStateTypes",
 	ErrInitStateTypeTooLong:          "ErrInitStateTypeTooLong",
 	ErrTooManyTSpends:                "ErrTooManyTSpends",
+	ErrMixPRScriptClassTooLong:       "ErrMixPRScriptClassTooLong",
+	ErrTooManyMixPRUTXOs:             "ErrTooManyMixPRUTXOs",
+	ErrTooManyPrevMixMsgs:            "ErrTooManyPrevMixMsgs",
 }
 
 // String returns the ErrorCode as a human-readable name.
