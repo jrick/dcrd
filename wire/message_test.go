@@ -1,5 +1,5 @@
 // Copyright (c) 2013-2016 The btcsuite developers
-// Copyright (c) 2015-2021 The Decred developers
+// Copyright (c) 2015-2023 The Decred developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -80,6 +80,16 @@ func TestMessage(t *testing.T) {
 	msgReject := NewMsgReject("block", RejectDuplicate, "duplicate block")
 	msgGetInitState := NewMsgGetInitState()
 	msgInitState := NewMsgInitState()
+	msgMixPR, err := NewMsgMixPR([33]byte{}, 1, 1, "", 1, 1, 1, 1, []MixPRUTXO{}, NewTxOut(0, []byte{}))
+	if err != nil {
+		t.Errorf("NewMsgMixPR: %v", err)
+	}
+	msgMixKE := NewMsgMixKE([33]byte{}, [32]byte{}, 1, 1, [33]byte{}, [1218]byte{}, [32]byte{}, []chainhash.Hash{})
+	msgMixCT := NewMsgMixCT([33]byte{}, [32]byte{}, 1, 1, [][1047]byte{}, []chainhash.Hash{})
+	msgMixSR := NewMsgMixSR([33]byte{}, [32]byte{}, 1, 1, [][][]byte{{{}}}, []chainhash.Hash{})
+	msgMixDC := NewMsgMixDC([33]byte{}, [32]byte{}, 1, 1, []MixVec{*NewMixVec(1, 1)}, []chainhash.Hash{})
+	msgMixCM := NewMsgMixCM([33]byte{}, [32]byte{}, 1, 1, NewMsgTx(), []chainhash.Hash{})
+	msgMixRS := NewMsgMixRS([33]byte{}, [32]byte{}, 1, 1, [32]byte{}, [][]byte{}, [][]byte{})
 
 	tests := []struct {
 		in     Message     // Value to encode
@@ -112,6 +122,13 @@ func TestMessage(t *testing.T) {
 		{msgCFTypes, msgCFTypes, pver, MainNet, 26},
 		{msgGetInitState, msgGetInitState, pver, MainNet, 25},
 		{msgInitState, msgInitState, pver, MainNet, 27},
+		{msgMixPR, msgMixPR, pver, MainNet, 169},
+		{msgMixKE, msgMixKE, pver, MainNet, 1449},
+		{msgMixCT, msgMixCT, pver, MainNet, 166},
+		{msgMixSR, msgMixSR, pver, MainNet, 169},
+		{msgMixDC, msgMixDC, pver, MainNet, 171},
+		{msgMixCM, msgMixCM, pver, MainNet, 181},
+		{msgMixRS, msgMixRS, pver, MainNet, 213},
 	}
 
 	t.Logf("Running %d tests", len(tests))
