@@ -160,6 +160,13 @@ var (
 		version.Patch)
 )
 
+// inheritedListeners contains non-nil server listeners for any file
+// descriptors passed by the forking process.
+var inheritedListeners struct {
+	p2pListener net.Listener
+	rpcListener net.Listener
+}
+
 // simpleAddr implements the net.Addr interface with two struct fields
 type simpleAddr struct {
 	net, addr string
@@ -3600,6 +3607,7 @@ func setupRPCListeners() ([]net.Listener, error) {
 
 	// Setup TLS if not disabled.
 	listenFunc := net.Listen
+	var tlsConfig *tls.Config
 	if !cfg.DisableRPC && !cfg.DisableTLS {
 		// Generate the TLS cert and key file if both don't already exist.
 		keyFileExists := fileExists(cfg.RPCKey)
@@ -3625,7 +3633,8 @@ func setupRPCListeners() ([]net.Listener, error) {
 		if cfg.RPCAuthType == authTypeClientCert {
 			clientCACerts = cfg.RPCClientCAs
 		}
-		tlsConfig, err := makeReloadableTLSConfig(cfg.RPCCert, cfg.RPCKey,
+		var err error
+		tlsConfig, err = makeReloadableTLSConfig(cfg.RPCCert, cfg.RPCKey,
 			clientCACerts)
 		if err != nil {
 			return nil, err
@@ -3642,7 +3651,16 @@ func setupRPCListeners() ([]net.Listener, error) {
 		return nil, err
 	}
 
-	listeners := make([]net.Listener, 0, len(netAddrs))
+	listeners := make([]net.Listener, 0, len(netAddrs)+1)
+
+	if l := inheritedListeners.rpcListener; l != nil {
+		if tlsConfig != nil {
+			listeners = append(listeners, tls.NewListener(l, tlsConfig))
+		} else {
+			listeners = append(listeners, l)
+		}
+	}
+
 	for _, addr := range netAddrs {
 		listener, err := listenFunc(addr.Network(), addr.String())
 		if err != nil {
@@ -4163,7 +4181,10 @@ func initListeners(ctx context.Context, params *chaincfg.Params, amgr *addrmgr.A
 		notifyAddrServer = newBoundAddrEventServer(outgoingPipeMessages)
 	}
 
-	listeners := make([]net.Listener, 0, len(netAddrs))
+	listeners := make([]net.Listener, 0, len(netAddrs)+1)
+	if l := inheritedListeners.p2pListener; l != nil {
+		listeners = append(listeners, l)
+	}
 	for _, addr := range netAddrs {
 		var listenConfig net.ListenConfig
 		listener, err := listenConfig.Listen(ctx, addr.Network(), addr.String())

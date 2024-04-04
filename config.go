@@ -1020,7 +1020,7 @@ func loadConfig(appName string) (*config, []string, error) {
 
 	// --proxy or --connect without --listen disables listening.
 	if (cfg.Proxy != "" || len(cfg.ConnectPeers) > 0) &&
-		len(cfg.Listeners) == 0 {
+		len(cfg.Listeners) == 0 && inheritedListeners.p2pListener == nil {
 		cfg.DisableListen = true
 	}
 
@@ -1029,10 +1029,10 @@ func loadConfig(appName string) (*config, []string, error) {
 		cfg.DisableSeeders = true
 	}
 
-	// Add the default listener if none were specified. The default
-	// listener is all addresses on the listen port for the network
-	// we are to connect to.
-	if len(cfg.Listeners) == 0 {
+	// Add the default listener if none were specified or inherited. The
+	// default listener is all addresses on the listen port for the
+	// network we are to connect to.
+	if len(cfg.Listeners) == 0 && inheritedListeners.p2pListener == nil {
 		cfg.Listeners = []string{
 			net.JoinHostPort("", cfg.params.DefaultPort),
 		}
@@ -1076,7 +1076,7 @@ func loadConfig(appName string) (*config, []string, error) {
 	}
 
 	// Default RPC to listen on localhost only.
-	if !cfg.DisableRPC && len(cfg.RPCListeners) == 0 {
+	if !cfg.DisableRPC && len(cfg.RPCListeners) == 0 && inheritedListeners.rpcListener == nil {
 		addrs, err := net.LookupHost("localhost")
 		if err != nil {
 			return nil, nil, err
