@@ -1203,13 +1203,14 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions, madePairing *bool)
 			excl := sizeExcluded
 			kept := make([]*wire.MsgMixPairReq, 0, len(sesRun.prs))
 			for _, pr := range sesRun.prs {
-				if pr == excl[0] {
-					excl = excl[1:]
-					if len(excl) == 0 {
-						break
-					}
+				if pr != excl[0] {
+					kept = append(kept, pr)
+					continue
 				}
-				kept = append(kept, pr)
+				excl = excl[1:]
+				if len(excl) == 0 {
+					break
+				}
 			}
 
 			sid := mixing.SortPRsForSession(kept, unixEpoch)
