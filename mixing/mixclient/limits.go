@@ -50,7 +50,7 @@ func estimateOutputSize(scriptSize int) int {
 }
 
 func estimateIsStandardSize(inputs, outputs int) bool {
-	const maxSize = 100000
+	const maxSize = 10000
 
 	estimated := estimateP2PKHv0SerializeSize(inputs, outputs, false)
 	return estimated <= maxSize
