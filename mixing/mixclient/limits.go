@@ -6,13 +6,11 @@ import (
 	"github.com/decred/dcrd/wire"
 )
 
-// nolint: unused
 const (
 	redeemP2PKHv0SigScriptSize = 1 + 73 + 1 + 33
 	p2pkhv0PkScriptSize        = 1 + 1 + 1 + 20 + 1 + 1
 )
 
-// nolint: unused
 func estimateP2PKHv0SerializeSize(inputs, outputs int, hasChange bool) int {
 	// Sum the estimated sizes of the inputs and outputs.
 	txInsSize := inputs * estimateInputSize(redeemP2PKHv0SigScriptSize)
@@ -31,8 +29,6 @@ func estimateP2PKHv0SerializeSize(inputs, outputs int, hasChange bool) int {
 }
 
 // estimateInputSize returns the worst case serialize size estimate for a tx input
-//
-// nolint: unused
 func estimateInputSize(scriptSize int) int {
 	return 32 + // previous tx
 		4 + // output index
@@ -46,8 +42,6 @@ func estimateInputSize(scriptSize int) int {
 }
 
 // estimateOutputSize returns the worst case serialize size estimate for a tx output
-//
-// nolint: unused
 func estimateOutputSize(scriptSize int) int {
 	return 8 + // previous tx
 		2 + // version
@@ -55,7 +49,6 @@ func estimateOutputSize(scriptSize int) int {
 		scriptSize // script itself
 }
 
-// nolint: unused
 func estimateIsStandardSize(inputs, outputs int) bool {
 	const maxSize = 100000
 
@@ -68,13 +61,20 @@ func estimateIsStandardSize(inputs, outputs int) bool {
 // exceed the maximum allowed size.  Peers must be excluded from mixes if
 // their contributions would cause the total transaction size to be too large,
 // even if they have not acted maliciously in the mixing protocol.
-//
-// nolint: unused
-func checkLimited(currentTx, unmixed *wire.MsgTx, totalMessages int) error {
+func checkLimited(currentTx, unmixed *wire.MsgTx, totalMessages uint32) error {
 	totalInputs := len(currentTx.TxIn) + len(unmixed.TxIn)
-	totalOutputs := len(currentTx.TxOut) + len(unmixed.TxOut) + totalMessages
+	totalOutputs := len(currentTx.TxOut) + len(unmixed.TxOut) + int(totalMessages)
 	if !estimateIsStandardSize(totalInputs, totalOutputs) {
 		return errors.New("tx size would exceed standardness rules")
 	}
 	return nil
+}
+
+func mergeTx(currentTx, unmixed *wire.MsgTx) {
+	for _, in := range unmixed.TxIn {
+		currentTx.AddTxIn(in)
+	}
+	for _, out := range unmixed.TxOut {
+		currentTx.AddTxOut(out)
+	}
 }
