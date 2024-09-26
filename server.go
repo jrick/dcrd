@@ -2550,6 +2550,15 @@ func (s *server) handleAddPeer(sp *serverPeer) bool {
 //
 // This function is safe for concurrent access.
 func (s *server) AddPeer(sp *serverPeer) {
+	ua := sp.UserAgent()
+	switch {
+	case strings.Index(ua, "dcrd:2.0.4") != -1:
+	case strings.Index(ua, "dcrd:2.1.0") != -1:
+	default:
+		peerLog.Infof("Disconnecting from old peer (%s)", ua)
+		sp.Disconnect()
+		return
+	}
 	s.handleAddPeer(sp)
 
 	// Signal the net sync manager this peer is a new sync candidate unless it
