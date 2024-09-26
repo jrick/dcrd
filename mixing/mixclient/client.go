@@ -1906,6 +1906,8 @@ func (c *Client) alternateSession(pairing []byte, prs []*wire.MsgMixPairReq, d *
 	unixEpoch := uint64(d.epoch.Unix())
 
 	kes := c.mixpool.ReceiveKEsByPairing(pairing, unixEpoch)
+	c.logf("Have received %d KEs for %d PRs for pairid=%x", len(kes),
+		len(prs), pairing[:])
 
 	// Sort KEs by identity first (just to group these together) followed
 	// by the total referenced PR counts in increasing order (most recent
