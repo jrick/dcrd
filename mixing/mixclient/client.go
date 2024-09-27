@@ -2001,9 +2001,13 @@ func (c *Client) alternateSession(pairing []byte, prs []*wire.MsgMixPairReq, d *
 	neededForMajority := totalPRs / 2
 	remainingPRs := make([]chainhash.Hash, 0, totalPRs)
 	for prHash, count := range prCounts {
-		if count >= neededForMajority {
-			remainingPRs = append(remainingPRs, prHash)
+		if count < neededForMajority {
+			c.logf("PR %v being excluded from next session for not "+
+				"meeting majority count check (%d < %d)",
+				count, neededForMajority)
+			continue
 		}
+		remainingPRs = append(remainingPRs, prHash)
 	}
 
 	// Incrementally remove PRs that are not seen by all peers, and
@@ -2056,7 +2060,8 @@ func (c *Client) alternateSession(pairing []byte, prs []*wire.MsgMixPairReq, d *
 			}
 		}
 
-		c.logf("Removing PR %s, was only seen %d times", remainingPRs[0], prCounts[remainingPRs[0]])
+		c.logf("Removing PR %s, was only seen %d times", remainingPRs[0],
+			prCounts[remainingPRs[0]])
 		remainingPRs = remainingPRs[1:]
 
 		// Recalculate and reassign prCounts for next iteration.
