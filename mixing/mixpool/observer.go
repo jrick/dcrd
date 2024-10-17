@@ -151,9 +151,9 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 	// participants).
 	//
 	// The pairings variable maps all pairing IDs -> session hash -> KEs;
-	// completed maps only completed pairing IDs -> KEs.
+	// completed maps only completed session IDs -> KEs.
 	pairings := make(map[string]map[chainhash.Hash][]*wire.MsgMixKeyExchange)
-	completed := make(map[string][]*wire.MsgMixKeyExchange)
+	completed := make(map[chainhash.Hash][]*wire.MsgMixKeyExchange)
 	prByKE := make(map[chainhash.Hash]*wire.MsgMixPairReq)
 	timedOut := make(map[string]map[idPubKey]struct{})
 	active := o.mixpool.activeInEpoch(prevEpoch)
@@ -214,7 +214,7 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 				return err
 			}
 			if len(r.CMs) == len(sesKEs) {
-				completed[string(pairing)] = sesKEs
+				completed[sid] = sesKEs
 				continue
 			}
 
@@ -262,10 +262,18 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 	// and trying to disrupt mixing, and restrictions on their
 	// submitted UTXOs will be put in place after too many
 	// violations.
+	// This loop also records the completed pairings for all
+	// completed sessions.
+	completedPairings := make(map[string]struct{})
 	for _, kes := range completed {
 		for _, ke := range kes {
 			delete(active, ke.Identity)
 		}
+		pairing, err := prByKE[kes[0].Hash()].Pairing()
+		if err != nil {
+			return err
+		}
+		completedPairings[string(pairing)] = struct{}{}
 	}
 
 	// Modify the active map by removing identities when no
@@ -280,7 +288,7 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 		if err != nil {
 			return err
 		}
-		if _, ok := completed[string(pairing)]; !ok {
+		if _, ok := completedPairings[string(pairing)]; !ok {
 			if timedOutIDs, ok := timedOut[string(pairing)]; ok {
 				if _, ok := timedOutIDs[id]; ok {
 					continue
@@ -297,7 +305,7 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 
 func (o *Observer) updateStrikes(epoch uint64, misbehaving map[idPubKey]activePeer,
 	prByKE map[chainhash.Hash]*wire.MsgMixPairReq,
-	completed map[string][]*wire.MsgMixKeyExchange) {
+	completed map[chainhash.Hash][]*wire.MsgMixKeyExchange) {
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
