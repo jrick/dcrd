@@ -92,19 +92,6 @@ func (c *Client) blameTimedOut(sesLog *sessionLogger, sesRun *sessionRun, timeou
 	}
 	sesLog.logf("blaming %x during run (%s timeout)", []identity(blamed), stage)
 
-	now := time.Now()
-	c.mu.Lock()
-	for _, id := range blamed {
-		t, ok := c.timedOut[id]
-		if !ok {
-			t = new(timeoutCounter)
-		}
-		t.count++
-		t.time = now
-		c.timedOut[id] = t
-	}
-	c.mu.Unlock()
-
 	return blamed
 }
 
@@ -285,14 +272,14 @@ type timeoutCounter struct {
 
 // Client manages local mixing client sessions.
 type Client struct {
-	wallet  Wallet
-	mixpool *mixpool.Pool
+	wallet   Wallet
+	mixpool  *mixpool.Pool
+	observer *mixpool.Observer
 
 	// Pending and active sessions and peers (both local and, when
 	// blaming, remote).
 	pairings map[string]*pairedSessions
 	height   uint32
-	timedOut map[identity]*timeoutCounter
 	mu       sync.Mutex
 
 	warming   chan struct{}
@@ -324,8 +311,8 @@ func NewClient(w Wallet) *Client {
 	return &Client{
 		wallet:         w,
 		mixpool:        w.Mixpool(),
+		observer:       mixpool.NewObserver(w.Mixpool()),
 		pairings:       make(map[string]*pairedSessions),
-		timedOut:       make(map[identity]*timeoutCounter),
 		warming:        make(chan struct{}),
 		workQueue:      make(chan *queueWork, runtime.NumCPU()),
 		blake256Hasher: blake256.New(),
@@ -653,6 +640,8 @@ func (c *Client) epochTicker(ctx context.Context) error {
 	close(c.warming)
 	c.mu.Unlock()
 
+	prevEpoch := firstEpoch
+
 	for {
 		epoch, err := c.waitForEpoch(ctx)
 		if err != nil {
@@ -660,6 +649,12 @@ func (c *Client) epochTicker(ctx context.Context) error {
 		}
 
 		c.log("Epoch tick")
+
+		err = c.observer.CheckPrevEpoch(uint64(prevEpoch.Unix()))
+		if err != nil {
+			return err
+		}
+		prevEpoch = epoch
 
 		// Wait for any previous pairSession calls to timeout if they
 		// have not yet formed a session before the next epoch tick.
@@ -680,13 +675,7 @@ func (c *Client) epochTicker(ctx context.Context) error {
 
 			// Exclude identities who have timed out too many
 			// times.
-			l := len(prs)
-			prs = prs[:0]
-			for _, pr := range prs[:l] {
-				if t, ok := c.timedOut[pr.Identity]; !ok || t.count < timeoutLimit {
-					prs = append(prs, pr)
-				}
-			}
+			prs = c.observer.ExcludePRs(prs)
 
 			prsMap := make(map[identity]struct{})
 			for _, pr := range prs {
