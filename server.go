@@ -2840,8 +2840,8 @@ func (s *server) handleBlockchainNotification(notification *blockchain.Notificat
 			if s.mixObserver.MisbehavingBlock(block.MsgBlock()) {
 				// XXX move to debug?
 				syncLog.Infof("Refusing to vote on block spending misbehaving " +
-					"mix inputs (this is a lie)")
-				// XXX break
+					"mix inputs")
+				break
 			}
 
 			// Obtain the winning tickets for this block.  handleNotifyMsg
