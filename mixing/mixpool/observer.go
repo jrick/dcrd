@@ -376,6 +376,10 @@ func (o *Observer) removeStrikesForMix(tx *wire.MsgTx) {
 // MisbehavingBlock returns whether any transaction in the block spends an
 // output that was flagged as submitted by a misbehaving mixing peer.
 func (o *Observer) MisbehavingBlock(block *wire.MsgBlock) bool {
+	// Lock order: mixpool mutex must be acquired before observer mutex.
+	o.mixpool.mtx.RLock()
+	defer o.mixpool.mtx.RUnlock()
+
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -395,6 +399,10 @@ func (o *Observer) MisbehavingBlock(block *wire.MsgBlock) bool {
 // MisbehavingTx returns whether any transaction output was flagged as
 // submitted by a misbehaving mixing peer.
 func (o *Observer) MisbehavingTx(tx *wire.MsgTx) bool {
+	// Lock order: mixpool mutex must be acquired before observer mutex.
+	o.mixpool.mtx.RLock()
+	defer o.mixpool.mtx.RUnlock()
+
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -402,6 +410,12 @@ func (o *Observer) MisbehavingTx(tx *wire.MsgTx) bool {
 }
 
 func (o *Observer) misbehavingTx(tx *wire.MsgTx, block *wire.MsgBlock) bool {
+	txHash := tx.TxHash()
+	_, ok := o.mixpool.sessionsByTxHash[txHash]
+	if ok {
+		return false
+	}
+
 	for _, in := range tx.TxIn {
 		s, ok := o.strikes[in.PreviousOutPoint]
 		if !ok {
@@ -410,10 +424,10 @@ func (o *Observer) misbehavingTx(tx *wire.MsgTx, block *wire.MsgBlock) bool {
 		if len(s.strikes) >= strikeLimit {
 			if block == nil {
 				log.Debugf("Transaction %v spends misbehaving mixing input %v",
-					tx.TxHash(), in.PreviousOutPoint)
+					txHash, in.PreviousOutPoint)
 			} else {
 				log.Debugf("Transaction %v in block %v spends misbehaving mixing input %v",
-					tx.TxHash(), block.Header.BlockHash(), in.PreviousOutPoint)
+					txHash, block.Header.BlockHash(), in.PreviousOutPoint)
 			}
 			return true
 		}
