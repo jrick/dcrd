@@ -63,7 +63,7 @@ const (
 	cmTimeout
 )
 
-func blameTimedOut(sesLog *sessionLogger, sesRun *sessionRun, timeoutMessage int) blamedIdentities {
+func (c *Client) blameTimedOut(sesLog *sessionLogger, sesRun *sessionRun, timeoutMessage int) blamedIdentities {
 	var blamed blamedIdentities
 	var stage string
 	for _, p := range sesRun.peers {
@@ -91,6 +91,20 @@ func blameTimedOut(sesLog *sessionLogger, sesRun *sessionRun, timeoutMessage int
 		}
 	}
 	sesLog.logf("blaming %x during run (%s timeout)", []identity(blamed), stage)
+
+	now := time.Now()
+	c.mu.Lock()
+	for _, id := range blamed {
+		t, ok := c.timedOut[id]
+		if !ok {
+			t = new(timeoutCounter)
+		}
+		t.count++
+		t.time = now
+		c.timedOut[id] = t
+	}
+	c.mu.Unlock()
+
 	return blamed
 }
 
@@ -262,6 +276,13 @@ type queueWork struct {
 	res chan error
 }
 
+const timeoutLimit = 2
+
+type timeoutCounter struct {
+	count int
+	time  time.Time
+}
+
 // Client manages local mixing client sessions.
 type Client struct {
 	wallet  Wallet
@@ -271,6 +292,7 @@ type Client struct {
 	// blaming, remote).
 	pairings map[string]*pairedSessions
 	height   uint32
+	timedOut map[identity]*timeoutCounter
 	mu       sync.Mutex
 
 	warming   chan struct{}
@@ -303,6 +325,7 @@ func NewClient(w Wallet) *Client {
 		wallet:         w,
 		mixpool:        w.Mixpool(),
 		pairings:       make(map[string]*pairedSessions),
+		timedOut:       make(map[identity]*timeoutCounter),
 		warming:        make(chan struct{}),
 		workQueue:      make(chan *queueWork, runtime.NumCPU()),
 		blake256Hasher: blake256.New(),
@@ -654,6 +677,17 @@ func (c *Client) epochTicker(ctx context.Context) error {
 
 		for _, p := range c.pairings {
 			prs := c.mixpool.CompatiblePRs(p.pairing)
+
+			// Exclude identities who have timed out too many
+			// times.
+			l := len(prs)
+			prs = prs[:0]
+			for _, pr := range prs[:l] {
+				if t, ok := c.timedOut[pr.Identity]; !ok || t.count < timeoutLimit {
+					prs = append(prs, pr)
+				}
+			}
+
 			prsMap := make(map[identity]struct{})
 			for _, pr := range prs {
 				prsMap[pr.Identity] = struct{}{}
@@ -1366,7 +1400,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions, madePairing *bool)
 	if len(cts) != len(prs) {
 		// Blame peers
 		sesLog.logf("Received %d CTs for %d peers; rerunning", len(cts), len(prs))
-		return blameTimedOut(sesLog, sesRun, ctTimeout)
+		return c.blameTimedOut(sesLog, sesRun, ctTimeout)
 	}
 	sort.Slice(cts, func(i, j int) bool {
 		a := identityIndices[cts[i].Identity]
@@ -1460,7 +1494,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions, madePairing *bool)
 	if len(srs) != len(prs) {
 		// Blame peers
 		sesLog.logf("Received %d SRs for %d peers; rerunning", len(srs), len(prs))
-		return blameTimedOut(sesLog, sesRun, srTimeout)
+		return c.blameTimedOut(sesLog, sesRun, srTimeout)
 	}
 	sort.Slice(srs, func(i, j int) bool {
 		a := identityIndices[srs[i].Identity]
@@ -1547,7 +1581,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions, madePairing *bool)
 	if len(dcs) != len(prs) {
 		// Blame peers
 		sesLog.logf("Received %d DCs for %d peers; rerunning", len(dcs), len(prs))
-		return blameTimedOut(sesLog, sesRun, dcTimeout)
+		return c.blameTimedOut(sesLog, sesRun, dcTimeout)
 	}
 	sort.Slice(dcs, func(i, j int) bool {
 		a := identityIndices[dcs[i].Identity]
@@ -1634,7 +1668,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions, madePairing *bool)
 	if len(cms) != len(prs) {
 		// Blame peers
 		sesLog.logf("Received %d CMs for %d peers; rerunning", len(cms), len(prs))
-		return blameTimedOut(sesLog, sesRun, cmTimeout)
+		return c.blameTimedOut(sesLog, sesRun, cmTimeout)
 	}
 	sort.Slice(cms, func(i, j int) bool {
 		a := identityIndices[cms[i].Identity]
