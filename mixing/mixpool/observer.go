@@ -431,7 +431,7 @@ func (o *Observer) ExcludePRs(prs []*wire.MsgMixPairReq) []*wire.MsgMixPairReq {
 			if len(s.strikes) >= strikeLimit {
 				log.Debugf("Excluding PR %v by %x: output %v "+
 					"flagged for misbehavior %v times",
-					pr.Hash(), pr.Identity[:], op)
+					pr.Hash(), pr.Identity[:], op, len(s.strikes))
 				continue
 			}
 		}
