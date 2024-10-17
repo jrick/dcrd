@@ -6,6 +6,7 @@ package mixpool
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -17,6 +18,51 @@ const strikeLimit = 2
 
 const minPeers = 4 // Keep synced with mixclient.MinPeers
 
+type strikeSet struct {
+	set     map[wire.OutPoint]struct{}
+	strikes []uint64
+}
+
+func sortUniq(strikes []uint64) []uint64 {
+	sort.Slice(strikes, func(i, j int) bool {
+		return strikes[i] < strikes[j]
+	})
+	n := len(strikes)
+	strikes = strikes[:1]
+	last := strikes[0]
+	for _, epoch := range strikes[1:n] {
+		if epoch != last {
+			strikes = append(strikes, epoch)
+			last = epoch
+		}
+	}
+	return strikes
+}
+
+func (s *strikeSet) merge(other *strikeSet) {
+	if s == other {
+		return
+	}
+
+	for op := range other.set {
+		s.set[op] = struct{}{}
+	}
+
+	s.strikes = sortUniq(append(s.strikes, other.strikes...))
+}
+
+func mergeStrikeSets(ss map[*strikeSet]struct{}) *strikeSet {
+	var s *strikeSet
+	for other := range ss {
+		if s == nil {
+			s = other
+			continue
+		}
+		s.merge(other)
+	}
+	return s
+}
+
 // Observer tracks outpoints that were not included in successful mixes.  This
 // provides mempool and voting policy the context necessary to discourage
 // denial-of-service where misbehaving mixing peers churn and resubmit
@@ -24,7 +70,7 @@ const minPeers = 4 // Keep synced with mixclient.MinPeers
 type Observer struct {
 	mixpool *Pool
 	epoch   time.Duration
-	strikes map[wire.OutPoint][]uint64
+	strikes map[wire.OutPoint]*strikeSet
 	mu      sync.RWMutex
 }
 
@@ -33,7 +79,7 @@ func NewObserver(mixpool *Pool) *Observer {
 	o := &Observer{
 		mixpool: mixpool,
 		epoch:   mixpool.Epoch(),
-		strikes: make(map[wire.OutPoint][]uint64),
+		strikes: make(map[wire.OutPoint]*strikeSet),
 	}
 	mixpool.observer = o
 	return o
@@ -258,12 +304,35 @@ func (o *Observer) updateStrikes(epoch uint64, misbehaving map[idPubKey]activePe
 
 	// Add a strike for any active identity that was not included in a
 	// completed mix last epoch.
+	//
+	// Strikes are increased for all UTXOs associated with the misbehaving
+	// identity.  If a new pair request is created that references a
+	// different set of UTXOs, but with at least one shared UTXO, common
+	// ownership can be established and all UTXOs from each PR are given
+	// new strikes.
 	for _, ap := range misbehaving {
 		log.Debugf("Pair request by mixing identity %x flagged for misbehavior",
 			ap.pr.Identity[:])
+
+		ss := make(map[*strikeSet]struct{})
 		for i := range ap.pr.UTXOs {
 			outpoint := &ap.pr.UTXOs[i].OutPoint
-			o.strikes[*outpoint] = append(o.strikes[*outpoint], epoch)
+			s, ok := o.strikes[*outpoint]
+			if !ok {
+				continue
+			}
+			ss[s] = struct{}{}
+		}
+		s := mergeStrikeSets(ss)
+		if s == nil {
+			s = &strikeSet{
+				set: make(map[wire.OutPoint]struct{}),
+			}
+		}
+		s.strikes = append(s.strikes, epoch)
+		for i := range ap.pr.UTXOs {
+			outpoint := &ap.pr.UTXOs[i].OutPoint
+			o.strikes[*outpoint] = s
 		}
 	}
 
@@ -280,8 +349,8 @@ func (o *Observer) updateStrikes(epoch uint64, misbehaving map[idPubKey]activePe
 
 	// Remove strikes if none occurred in the past 24h.
 	cutoff := epoch - (60 * 60 * 24)
-	for op, strikes := range o.strikes {
-		if strikes[len(strikes)-1] <= cutoff {
+	for op, s := range o.strikes {
+		if s.strikes[len(s.strikes)-1] <= cutoff {
 			delete(o.strikes, op)
 		}
 	}
@@ -326,7 +395,11 @@ func (o *Observer) MisbehavingTx(tx *wire.MsgTx) bool {
 
 func (o *Observer) misbehavingTx(tx *wire.MsgTx, block *wire.MsgBlock) bool {
 	for _, in := range tx.TxIn {
-		if len(o.strikes[in.PreviousOutPoint]) >= strikeLimit {
+		s, ok := o.strikes[in.PreviousOutPoint]
+		if !ok {
+			continue
+		}
+		if len(s.strikes) >= strikeLimit {
 			if block == nil {
 				log.Debugf("Transaction %v spends misbehaving mixing input %v",
 					tx.TxHash(), in.PreviousOutPoint)
@@ -350,7 +423,9 @@ func (o *Observer) ExcludePRs(prs []*wire.MsgMixPairReq) []*wire.MsgMixPairReq {
 	prs = prs[:0]
 	for _, pr := range prs[:l] {
 		for i := range pr.UTXOs {
-			if len(o.strikes[pr.UTXOs[i].OutPoint]) >= strikeLimit {
+			op := &pr.UTXOs[i].OutPoint
+			s, ok := o.strikes[*op]
+			if !ok {
 				continue
 			}
 			if len(s.strikes) >= strikeLimit {
