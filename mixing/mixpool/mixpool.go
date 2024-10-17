@@ -574,8 +574,13 @@ func (p *Pool) removeSession(sid [32]byte, txHash *chainhash.Hash, success bool)
 	for hash := range ses.hashes {
 		e, ok := p.pool[hash]
 		if ok {
-			log.Debugf("Removing session %x %T %v by %x",
-				sid[:], e.msg, hash, e.msg.Pub())
+			if txHash == nil {
+				log.Debugf("Removing session %x %T %v by %x",
+					sid[:], e.msg, hash, e.msg.Pub())
+			} else {
+				log.Debugf("Removing session %x %T %v by %x (completed mix %v)",
+					sid[:], e.msg, hash, e.msg.Pub(), txHash)
+			}
 			p.removeMessage(hash)
 		}
 	}
