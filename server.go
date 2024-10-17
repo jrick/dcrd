@@ -597,6 +597,7 @@ type server struct {
 	feeEstimator         *fees.Estimator
 	cpuMiner             *cpuminer.CPUMiner
 	mixMsgPool           *mixpool.Pool
+	mixObserver          *mixpool.Observer
 	modifyRebroadcastInv chan interface{}
 	peerState            peerState
 	relayInv             chan relayMsg
@@ -2801,6 +2802,7 @@ func (s *server) handleBlockchainNotification(notification *blockchain.Notificat
 		// - The block that would build on this one would not cause a reorg
 		//   larger than the max reorg notify depth
 		// - A notification for this block has not already been sent
+		// - The block does not spend a mixing UTXO marked as misbehaving
 		//
 		// To help visualize the math here, consider the following two competing
 		// branches:
@@ -2828,11 +2830,19 @@ func (s *server) handleBlockchainNotification(notification *blockchain.Notificat
 		reorgDepth := bestHeight - (blockHeight - band.ForkLen)
 		isOldMainnetBlock := s.chainParams.Net == wire.MainNet &&
 			blockHeight >= 777240 && blockHeader.Version < 10
-		if s.rpcServer != nil &&
+		switch {
+		case s.rpcServer != nil &&
 			blockHeight >= s.chainParams.StakeValidationHeight-1 &&
 			reorgDepth < maxReorgDepthNotify &&
 			!isOldMainnetBlock &&
-			!s.notifiedWinningTickets(blockHash) {
+			!s.notifiedWinningTickets(blockHash):
+
+			if s.mixObserver.MisbehavingBlock(block.MsgBlock()) {
+				// XXX move to debug?
+				syncLog.Infof("Refusing to vote on block spending misbehaving " +
+					"mix inputs")
+				break
+			}
 
 			// Obtain the winning tickets for this block.  handleNotifyMsg
 			// should be safe for concurrent access of things contained within
@@ -2841,19 +2851,20 @@ func (s *server) handleBlockchainNotification(notification *blockchain.Notificat
 			if err != nil {
 				syncLog.Errorf("Couldn't calculate winning tickets for "+
 					"accepted block %v: %v", blockHash, err.Error())
-			} else {
-				// Notify registered websocket clients of newly eligible tickets
-				// to vote on.
-				s.rpcServer.NotifyWinningTickets(&rpcserver.WinningTicketsNtfnData{
-					BlockHash:   *blockHash,
-					BlockHeight: blockHeight,
-					Tickets:     wt,
-				})
-
-				s.lotteryDataBroadcastMtx.Lock()
-				s.lotteryDataBroadcast[*blockHash] = struct{}{}
-				s.lotteryDataBroadcastMtx.Unlock()
+				break
 			}
+
+			// Notify registered websocket clients of newly eligible tickets
+			// to vote on.
+			s.rpcServer.NotifyWinningTickets(&rpcserver.WinningTicketsNtfnData{
+				BlockHash:   *blockHash,
+				BlockHeight: blockHeight,
+				Tickets:     wt,
+			})
+
+			s.lotteryDataBroadcastMtx.Lock()
+			s.lotteryDataBroadcast[*blockHash] = struct{}{}
+			s.lotteryDataBroadcastMtx.Unlock()
 		}
 
 		// Relay the block announcement immediately to all peers that were not
@@ -3366,6 +3377,13 @@ func (s *server) Run(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		s.indexSubscriber.Run(ctx)
+		wg.Done()
+	}()
+
+	// Start the misbehaving mix peer observer.
+	wg.Add(1)
+	go func() {
+		s.mixObserver.Run(ctx)
 		wg.Done()
 	}()
 
@@ -4044,11 +4062,15 @@ func newServer(ctx context.Context, profiler *profileServer,
 			tipHash := s.chain.BestSnapshot().Hash
 			return s.chain.CheckTSpendExists(tipHash, tspend)
 		},
+		NonMixSpendsPairRequest: func(tx *dcrutil.Tx) bool {
+			return s.mixMsgPool.NonMixSpendsPR(tx.MsgTx())
+		},
 	}
 	s.txMemPool = mempool.New(&txC)
 
 	mixchain := &mixpoolChain{s.chain, s.txMemPool}
 	s.mixMsgPool = mixpool.NewPool(mixchain)
+	s.mixObserver = mixpool.NewObserver(s.mixMsgPool)
 
 	s.syncManager = netsync.New(&netsync.Config{
 		PeerNotifier:          &s,
