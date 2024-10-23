@@ -1350,7 +1350,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *dcrutil.Tx, isNew, allowHighFees,
 
 	// Don't allow non-mix transactions which spend current pair requests
 	// in the mixpool.
-	if mp.cfg.NonMixSpendsPairRequest(tx) {
+	if mp.cfg.NonMixSpendsPairRequest != nil && mp.cfg.NonMixSpendsPairRequest(tx) {
 		str := fmt.Sprintf("non-mix transaction %v spends current mixpool "+
 			"pair request UTXOs", txHash)
 		return nil, txRuleError(ErrMixpoolDoubleSpend, str)
