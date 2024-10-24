@@ -443,6 +443,7 @@ func (o *Observer) ExcludePRs(prs []*wire.MsgMixPairReq) []*wire.MsgMixPairReq {
 
 	l := len(prs)
 	prs = prs[:0]
+PRs:
 	for _, pr := range prs[:l] {
 		for i := range pr.UTXOs {
 			op := &pr.UTXOs[i].OutPoint
@@ -454,7 +455,7 @@ func (o *Observer) ExcludePRs(prs []*wire.MsgMixPairReq) []*wire.MsgMixPairReq {
 				log.Debugf("Excluding PR %v by %x: output %v "+
 					"flagged for misbehavior %v times",
 					pr.Hash(), pr.Identity[:], op, len(s.strikes))
-				continue
+				continue PRs
 			}
 		}
 		prs = append(prs, pr)
