@@ -36,7 +36,15 @@ import (
 // MinPeers is the minimum number of peers required for a mix run to proceed.
 const MinPeers = 4
 
-const pairingFlags byte = 0
+const (
+	// Older mixclient versions failed to sort roots before finding
+	// reserved slots.  The roots as returned by libflint are not already
+	// sorted, so a incompatible pairing flag is needed to require this
+	// change.
+	sortedRoots byte = 1 << iota
+
+	pairingFlags = sortedRoots
+)
 
 const (
 	timeoutDuration = 30 * time.Second
@@ -1714,6 +1722,9 @@ func (c *Client) roots(ctx context.Context, seenSRs []chainhash.Hash,
 			close(publishedRoots)
 			return nil, errTriggeredBlame
 		}
+		sort.Slice(roots, func(i, j int) bool {
+			return roots[i].Cmp(roots[j]) == -1
+		})
 		rootBytes := make([][]byte, len(roots))
 		for i, root := range roots {
 			rootBytes[i] = root.Bytes()
@@ -1784,6 +1795,12 @@ func (c *Client) roots(ctx context.Context, seenSRs []chainhash.Hash,
 					duplicateRoots[rootStr] = struct{}{}
 					roots = append(roots, root)
 				}
+			}
+			sorted := sort.SliceIsSorted(roots, func(i, j int) bool {
+				return roots[i].Cmp(roots[j]) == -1
+			})
+			if !sorted {
+				continue
 			}
 			if len(roots) == len(a)-1 {
 				return roots, nil
