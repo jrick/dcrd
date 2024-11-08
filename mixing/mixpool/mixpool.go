@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
 	"sync"
 	"time"
@@ -731,10 +732,13 @@ type Received struct {
 // such session has any messages currently accepted in the mixpool, the method
 // immediately errors.
 //
-// If any secrets messages are received for the described session, and r.RSs
-// is nil, Receive immediately returns ErrSecretsRevealed.  An additional call
-// to Receive with a non-nil RSs can be used to receive all of the secrets
-// after each peer publishes their own revealed secrets.
+// If r.RSs is nil and any secrets messages are received for the described
+// session, Receive will count these messages towards the total number of
+// expected messages based on the slice capacities (without overcounting if
+// the identity has also sent an expected non-RS message) and will return
+// ErrSecretsRevealed.  An additional call to Receive with a non-nil RSs can
+// be used to receive all of the secrets after each peer publishes their own
+// revealed secrets.
 func (p *Pool) Receive(ctx context.Context, r *Received) error {
 	sid := r.Sid
 	var bc *broadcast
@@ -784,42 +788,32 @@ Loop:
 	for {
 		// Pool is locked for reads.  Count if the total number of
 		// expected messages have been received.
-		received := 0
+		received := make(map[idPubKey]struct{})
+		countMsg := func(msg mixing.Message) {
+			received[*(*idPubKey)(msg.Pub())] = struct{}{}
+		}
 		for hash := range ses.hashes {
-			msgtype := p.pool[hash].msgtype
+			e := p.pool[hash]
+			msg := e.msg
+			msgtype := e.msgtype
 			switch {
 			case msgtype == msgtypeKE && r.KEs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeCT && r.CTs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeSR && r.SRs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeDC && r.DCs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeCM && r.CMs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeFP && r.FPs != nil:
-				received++
+				countMsg(msg)
 			case msgtype == msgtypeRS:
-				if r.RSs == nil {
-					// Since initial reporters of secrets
-					// need to take the blame for
-					// erroneous blame assignment if no
-					// issue was detected, we only trigger
-					// this for RS messages that do not
-					// reference any other previous RS.
-					rs := p.pool[hash].msg.(*wire.MsgMixSecrets)
-					prev := rs.PrevMsgs()
-					if len(prev) == 0 {
-						p.mtx.RUnlock()
-						return ErrSecretsRevealed
-					}
-				} else {
-					received++
-				}
+				countMsg(msg)
 			}
 		}
-		if received >= expectedMessages {
+		if len(received) >= expectedMessages {
 			break
 		}
 
@@ -835,6 +829,8 @@ Loop:
 
 		p.mtx.RLock()
 	}
+
+	var err error
 
 	// Pool is locked for reads.  Collect all of the messages.
 	for hash := range ses.hashes {
@@ -865,14 +861,15 @@ Loop:
 				r.FPs = append(r.FPs, msg)
 			}
 		case *wire.MsgMixSecrets:
-			if r.RSs != nil {
-				r.RSs = append(r.RSs, msg)
+			if r.RSs == nil {
+				err = ErrSecretsRevealed
 			}
+			r.RSs = append(r.RSs, msg)
 		}
 	}
 
 	p.mtx.RUnlock()
-	return nil
+	return err
 }
 
 var zeroHash chainhash.Hash
@@ -1004,6 +1001,11 @@ func (p *Pool) AcceptMessage(msg mixing.Message) (accepted []mixing.Message, err
 	case *wire.MsgMixConfirm:
 		msgtype = msgtypeCM
 	case *wire.MsgMixFactoredPoly:
+		roots := make([]*big.Int, 0, len(msg.Roots))
+		for _, r := range msg.Roots {
+			roots = append(roots, new(big.Int).SetBytes(r))
+		}
+		log.Debugf("FP %v by %x, sid=%x roots: %v", msg.Hash(), msg.Identity[:], msg.SessionID[:], roots)
 		msgtype = msgtypeFP
 	case *wire.MsgMixSecrets:
 		msgtype = msgtypeRS
