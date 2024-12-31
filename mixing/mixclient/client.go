@@ -527,26 +527,21 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		return msgs[i].t.Before(msgs[j].t)
 	})
 
-	nilPeerMsg := func(p *peer, msgMask uint) {
-		if msgMask&msgKE == msgKE {
+	nilPeerMsg := func(p *peer, msg mixing.Message) {
+		switch msg.(type) {
+		case *wire.MsgMixKeyExchange:
 			p.ke = nil
-		}
-		if msgMask&msgCT == msgCT {
+		case *wire.MsgMixCiphertexts:
 			p.ct = nil
-		}
-		if msgMask&msgSR == msgSR {
+		case *wire.MsgMixSlotReserve:
 			p.sr = nil
-		}
-		if msgMask&msgFP == msgFP {
+		case *wire.MsgMixFactoredPoly:
 			p.fp = nil
-		}
-		if msgMask&msgDC == msgDC {
+		case *wire.MsgMixDCNet:
 			p.dc = nil
-		}
-		if msgMask&msgCM == msgCM {
+		case *wire.MsgMixConfirm:
 			p.cm = nil
-		}
-		if msgMask&msgRS == msgRS {
+		case *wire.MsgMixSecrets:
 			p.rs = nil
 		}
 	}
@@ -562,7 +557,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 			f: func(p *peer) error {
 				err := p.signAndSubmit(m.m)
 				if err != nil {
-					nilPeerMsg(p, msgMask)
+					nilPeerMsg(p, m.m)
 				}
 				return err
 			},
