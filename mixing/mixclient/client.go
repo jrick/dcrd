@@ -556,6 +556,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 			continue
 		}
 		if err := m.p.ctx.Err(); err != nil {
+			nilPeerMsg(m.p, m.m)
 			res <- err
 			continue
 		}
