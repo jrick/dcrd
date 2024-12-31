@@ -570,21 +570,15 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 			res <- errSendTimeout
 			continue
 		}
-		qsend := &queueWork{
-			p: m.p,
-			f: func(p *peer) error {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				err := p.signAndSubmit(m.m)
-				if err != nil {
-					nilPeerMsg(p, m.m)
-				}
-				return err
-			},
-			res: res,
+		if err := ctx.Err(); err != nil {
+			res <- err
+			continue
 		}
-		c.workQueue <- qsend
+		err := m.p.signAndSubmit(m.m)
+		if err != nil {
+			nilPeerMsg(m.p)
+		}
+		res <- err
 	}
 	var errs = make([]error, len(resChans))
 	for i := range errs {
