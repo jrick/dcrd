@@ -551,23 +551,32 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		res := make(chan error, 1)
 		resChans = append(resChans, res)
 		m := msgs[i]
+		if err := ctx.Err(); err != nil {
+			res <- err
+			continue
+		}
+		if err := m.p.ctx.Err(); err != nil {
+			res <- err
+			continue
+		}
 		time.Sleep(time.Until(m.t))
 		qsend := &queueWork{
 			p: m.p,
-			f: func(p *peer) error {
-				err := p.signAndSubmit(m.m)
-				if err != nil {
+			f: func(p *peer) (err error) {
+				defer func() {
+					if err == nil {
+						return
+					}
 					nilPeerMsg(p, m.m)
+				}()
+				if err := ctx.Err(); err != nil {
+					return err
 				}
-				return err
+				return p.signAndSubmit(m.m)
 			},
 			res: res,
 		}
-		select {
-		case <-ctx.Done():
-			res <- ctx.Err()
-		case c.workQueue <- qsend:
-		}
+		c.workQueue <- qsend
 	}
 	var errs = make([]error, len(resChans))
 	for i := range errs {
