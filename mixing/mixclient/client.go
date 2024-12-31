@@ -573,13 +573,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 			continue
 		case <-time.After(time.Until(m.sendTime)):
 		}
-		// TODO: handle send deadline in wallet.SubmitMixMessage.
-		if time.Now().After(m.deadline) {
-			nilPeerMsg(m.p, m.m)
-			errs = append(errs, errSendTimeout)
-			continue
-		}
-		err := m.p.signAndSubmit(m.m)
+		err := m.p.signAndSubmit(m.deadline, m.m)
 		if err != nil {
 			nilPeerMsg(m.p, m.m)
 			errs = append(errs, err)
@@ -671,11 +665,13 @@ func (p *peer) signAndHash(m mixing.Message) error {
 	return nil
 }
 
-func (p *peer) submit(m mixing.Message) error {
-	return p.client.wallet.SubmitMixMessage(p.ctx, m)
+func (p *peer) submit(deadline time.Time, m mixing.Message) error {
+	ctx, cancel := context.WithDeadline(p.ctx, deadline)
+	defer cancel()
+	return p.client.wallet.SubmitMixMessage(ctx, m)
 }
 
-func (p *peer) signAndSubmit(m mixing.Message) error {
+func (p *peer) signAndSubmit(deadline time.Time, m mixing.Message) error {
 	if m == nil {
 		return nil
 	}
@@ -683,7 +679,7 @@ func (p *peer) signAndSubmit(m mixing.Message) error {
 	if err != nil {
 		return err
 	}
-	return p.submit(m)
+	return p.submit(deadline, m)
 }
 
 func (c *Client) newPendingPairing(pairing []byte) *pendingPairing {
@@ -866,7 +862,8 @@ func (c *Client) Dicemix(ctx context.Context, cj *CoinJoin) error {
 	pending.localPeers[*p.id] = p
 	c.mu.Unlock()
 
-	err = p.submit(pr)
+	deadline := time.Now().Add(timeoutDuration)
+	err = p.submit(deadline, pr)
 	if err != nil {
 		c.mu.Lock()
 		delete(pending.localPeers, *p.id)
