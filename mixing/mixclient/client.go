@@ -568,6 +568,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 		if time.Now().After(m.deadline) {
 			nilPeerMsg(m.p, m.m)
 			res <- errSendTimeout
+			continue
 		}
 		qsend := &queueWork{
 			p: m.p,
