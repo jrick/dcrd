@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"time"
 
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -49,7 +50,7 @@ func (e blamedIdentities) String() string {
 	return buf.String()
 }
 
-func (c *Client) blame(ctx context.Context, ps *pairedSessions, sesRun *sessionRun) (err error) {
+func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 	sesRun.logf("running blame assignment")
 
 	mp := c.mixpool
@@ -67,9 +68,11 @@ func (c *Client) blame(ctx context.Context, ps *pairedSessions, sesRun *sessionR
 		}
 	}()
 
+	deadline := time.Now().Add(timeoutDuration)
+
 	// Send initial secrets messages from any peers who detected
 	// misbehavior.
-	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, 0)
+	err = c.sendLocalPeerMsgs(ctx, deadline, sesRun, 0)
 	if err != nil {
 		return err
 	}
@@ -94,7 +97,7 @@ func (c *Client) blame(ctx context.Context, ps *pairedSessions, sesRun *sessionR
 		}
 		return nil
 	})
-	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, msgRS)
+	err = c.sendLocalPeerMsgs(ctx, deadline, sesRun, msgRS)
 	if err != nil {
 		return err
 	}

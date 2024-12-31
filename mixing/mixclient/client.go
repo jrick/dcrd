@@ -479,7 +479,7 @@ type delayedMsg struct {
 	p        *peer
 }
 
-func (c *Client) sendLocalPeerMsgs(ctx context.Context, d *deadlines, s *sessionRun, msgMask uint) error {
+func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *sessionRun, msgMask uint) error {
 	now := time.Now()
 
 	msgs := make([]delayedMsg, 0, len(s.peers)*bits.OnesCount(msgMask))
@@ -489,6 +489,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, d *deadlines, s *session
 		}
 		msg := delayedMsg{
 			sendTime: now.Add(p.msgJitter()),
+			deadline: deadline,
 			m:        nil,
 			p:        p,
 		}
@@ -497,37 +498,30 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, d *deadlines, s *session
 			msgMask |= msgRS
 		}
 		if msgMask&msgKE == msgKE && p.ke != nil {
-			msg.deadline = d.recvKE
 			msg.m = p.ke
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCT == msgCT && p.ct != nil {
-			msg.deadline = d.recvCT
 			msg.m = p.ct
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgSR == msgSR && p.sr != nil {
-			msg.deadline = d.recvSR
 			msg.m = p.sr
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgFP == msgFP && p.fp != nil {
-			msg.deadline = d.recvDC
 			msg.m = p.fp
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgDC == msgDC && p.dc != nil {
-			msg.deadline = d.recvDC
 			msg.m = p.dc
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCM == msgCM && p.cm != nil {
-			msg.deadline = d.recvCM
 			msg.m = p.cm
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgRS == msgRS && p.rs != nil {
-			msg.deadline = now.Add(timeoutDuration)
 			msg.m = p.rs
 			msgs = append(msgs, msg)
 		}
@@ -1120,7 +1114,7 @@ func (c *Client) pairSession(ctx context.Context, ps *pairedSessions, prs []*wir
 
 		case errors.Is(err, errTriggeredBlame) || errors.Is(err, mixpool.ErrSecretsRevealed):
 			revealedSecrets = true
-			err := c.blame(ctx, ps, r)
+			err := c.blame(ctx, r)
 			if !errors.As(err, &blamed) {
 				r.logf("Aborting session for failed blame assignment: %v", err)
 				return
@@ -1353,7 +1347,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 	} else {
 		sesRun.freshGen = false
 	}
-	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, msgKE)
+	err = c.sendLocalPeerMsgs(ctx, ps.deadlines.recvKE, sesRun, msgKE)
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1565,7 +1559,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
-	err = c.sendLocalPeerMsgs(ctx, d, sesRun, msgCT)
+	err = c.sendLocalPeerMsgs(ctx, d.recvCT, sesRun, msgCT)
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1656,7 +1650,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		sesRun.logf("blaming %x during run (wrong ciphertext count)", []identity(blamed))
 		return sesRun, blamed
 	}
-	sendErr := c.sendLocalPeerMsgs(ctx, d, sesRun, msgSR)
+	sendErr := c.sendLocalPeerMsgs(ctx, d.recvSR, sesRun, msgSR)
 	if sendErr != nil {
 		sesRun.logf("%v", sendErr)
 	}
@@ -1740,7 +1734,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		c.testHook(hookBeforePeerDCPublish, ps, sesRun, p)
 		return nil
 	})
-	sendErr = c.sendLocalPeerMsgs(ctx, d, sesRun, msgFP|msgDC)
+	sendErr = c.sendLocalPeerMsgs(ctx, d.recvDC, sesRun, msgFP|msgDC)
 	if sendErr != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1826,7 +1820,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		p.cm = cm
 		return nil
 	})
-	sendErr = c.sendLocalPeerMsgs(ctx, d, sesRun, msgCM)
+	sendErr = c.sendLocalPeerMsgs(ctx, d.recvCM, sesRun, msgCM)
 	if sendErr != nil {
 		sesRun.logf("%v", sendErr)
 	}
