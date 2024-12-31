@@ -145,7 +145,7 @@ func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 		if len(blamed) > 0 {
 			err = blamed
 		} else {
-			err = errBlamedFailed
+			err = errBlameFailed
 		}
 	}()
 
