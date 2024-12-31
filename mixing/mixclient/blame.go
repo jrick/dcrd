@@ -88,7 +88,9 @@ func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 	// initial peers who published secrets.
 	c.forLocalPeers(ctx, sesRun, func(p *peer) error {
 		if !p.triggeredBlame {
-			p.rs.SeenSecrets = rsHashes
+			if p.rs != nil {
+				p.rs.SeenSecrets = rsHashes
+			}
 		}
 		return nil
 	})

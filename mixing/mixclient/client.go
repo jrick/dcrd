@@ -527,6 +527,30 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		return msgs[i].t.Before(msgs[j].t)
 	})
 
+	nilPeerMsg := func(p *peer, msgMask uint) {
+		if msgMask&msgKE == msgKE {
+			p.ke = nil
+		}
+		if msgMask&msgCT == msgCT {
+			p.ct = nil
+		}
+		if msgMask&msgSR == msgSR {
+			p.sr = nil
+		}
+		if msgMask&msgFP == msgFP {
+			p.fp = nil
+		}
+		if msgMask&msgDC == msgDC {
+			p.dc = nil
+		}
+		if msgMask&msgCM == msgCM {
+			p.cm = nil
+		}
+		if msgMask&msgRS == msgRS && p.rs != nil {
+			p.rs = nil
+		}
+	}
+
 	resChans := make([]chan error, 0, len(msgs))
 	for i := range msgs {
 		res := make(chan error, 1)
@@ -536,7 +560,11 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		qsend := &queueWork{
 			p: m.p,
 			f: func(p *peer) error {
-				return p.signAndSubmit(m.m)
+				err := p.signAndSubmit(m.m)
+				if err != nil {
+					nilPeerMsg(p, msgMask)
+				}
+				return err
 			},
 			res: res,
 		}
