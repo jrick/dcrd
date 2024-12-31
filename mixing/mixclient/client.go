@@ -473,10 +473,10 @@ func (c *Client) forLocalPeers(ctx context.Context, s *sessionRun, f func(p *pee
 }
 
 type delayedMsg struct {
-	t time.Time
-	d time.Time
-	m mixing.Message
-	p *peer
+	sendTime time.Time
+	deadline time.Time
+	m        mixing.Message
+	p        *peer
 }
 
 func (c *Client) sendLocalPeerMsgs(ctx context.Context, d deadlines, s *sessionRun, msgMask uint) error {
@@ -488,52 +488,52 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, d deadlines, s *sessionR
 			continue
 		}
 		msg := delayedMsg{
-			t: now.Add(p.msgJitter()),
-			m: nil,
-			p: p,
+			sendTime: now.Add(p.msgJitter()),
+			m:        nil,
+			p:        p,
 		}
 		msgMask := msgMask
 		if p.triggeredBlame {
 			msgMask |= msgRS
 		}
 		if msgMask&msgKE == msgKE && p.ke != nil {
-			msg.d = d.recvKE
+			msg.deadline = d.recvKE
 			msg.m = p.ke
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCT == msgCT && p.ct != nil {
-			msg.d = d.recvCT
+			msg.deadline = d.recvCT
 			msg.m = p.ct
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgSR == msgSR && p.sr != nil {
-			msg.d = d.recvSR
+			msg.deadline = d.recvSR
 			msg.m = p.sr
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgFP == msgFP && p.fp != nil {
-			msg.d = d.recvDC
+			msg.deadline = d.recvDC
 			msg.m = p.fp
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgDC == msgDC && p.dc != nil {
-			msg.d = d.recvDC
+			msg.deadline = d.recvDC
 			msg.m = p.dc
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCM == msgCM && p.cm != nil {
-			msg.d = d.recvCM
+			msg.deadline = d.recvCM
 			msg.m = p.cm
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgRS == msgRS && p.rs != nil {
-			msg.d = now.Add(timeoutDuration)
+			msg.deadline = now.Add(timeoutDuration)
 			msg.m = p.rs
 			msgs = append(msgs, msg)
 		}
 	}
 	sort.SliceStable(msgs, func(i, j int) bool {
-		return msgs[i].t.Before(msgs[j].t)
+		return msgs[i].sendTime.Before(msgs[j].sendTime)
 	})
 
 	nilPeerMsg := func(p *peer, msg mixing.Message) {
@@ -569,9 +569,9 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, d deadlines, s *sessionR
 			res <- err
 			continue
 		}
-		time.Sleep(time.Until(m.t))
+		time.Sleep(time.Until(m.sendTime))
 		// TODO: handle send deadline in wallet.SubmitMixMessage.
-		if time.Now().After(m.d) {
+		if time.Now().After(m.deadline) {
 			nilPeerMsg(m.p, m.m)
 			res <- errSendTimeout
 		}
