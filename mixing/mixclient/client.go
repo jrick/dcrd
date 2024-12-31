@@ -549,40 +549,34 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 		}
 	}
 
-	resChans := make([]chan error, 0, len(msgs))
+	errs := make([]error, 0, len(msgs))
 	for i := range msgs {
-		res := make(chan error, 1)
-		resChans = append(resChans, res)
 		m := msgs[i]
 		if err := ctx.Err(); err != nil {
-			res <- err
+			errs = append(errs, err)
 			continue
 		}
 		if err := m.p.ctx.Err(); err != nil {
 			nilPeerMsg(m.p, m.m)
-			res <- err
+			errs = append(errs, err)
 			continue
 		}
 		time.Sleep(time.Until(m.sendTime))
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		// TODO: handle send deadline in wallet.SubmitMixMessage.
 		if time.Now().After(m.deadline) {
 			nilPeerMsg(m.p, m.m)
-			res <- errSendTimeout
-			continue
-		}
-		if err := ctx.Err(); err != nil {
-			res <- err
+			errs = append(errs, errSendTimeout)
 			continue
 		}
 		err := m.p.signAndSubmit(m.m)
 		if err != nil {
 			nilPeerMsg(m.p, m.m)
+			errs = append(errs, err)
 		}
-		res <- err
-	}
-	var errs = make([]error, len(resChans))
-	for i := range errs {
-		errs[i] = <-resChans[i]
 	}
 	return errors.Join(errs...)
 }
