@@ -550,10 +550,24 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 	}
 
 	errs := make([]error, 0, len(msgs))
+
+	var sessionCancelledState bool
+	sessionCancelled := func() bool {
+		if sessionCancelledState {
+			return true
+		}
+		if err := ctx.Err(); err != nil {
+			err := fmt.Errorf("session cancelled: %w", err)
+			errs = append(errs, err)
+			sessionCancelledState = true
+			return true
+		}
+		return false
+	}
+
 	for i := range msgs {
 		m := msgs[i]
-		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
+		if sessionCancelled() {
 			continue
 		}
 		if err := m.p.ctx.Err(); err != nil {
@@ -562,8 +576,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 			continue
 		}
 		time.Sleep(time.Until(m.sendTime))
-		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
+		if sessionCancelled() {
 			continue
 		}
 		// TODO: handle send deadline in wallet.SubmitMixMessage.
