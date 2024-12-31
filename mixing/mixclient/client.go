@@ -563,17 +563,15 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		time.Sleep(time.Until(m.t))
 		qsend := &queueWork{
 			p: m.p,
-			f: func(p *peer) (err error) {
-				defer func() {
-					if err == nil {
-						return
-					}
-					nilPeerMsg(p, m.m)
-				}()
+			f: func(p *peer) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				return p.signAndSubmit(m.m)
+				err := p.signAndSubmit(m.m)
+				if err != nil {
+					nilPeerMsg(p, m.m)
+				}
+				return err
 			},
 			res: res,
 		}
