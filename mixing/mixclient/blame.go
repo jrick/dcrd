@@ -49,7 +49,7 @@ func (e blamedIdentities) String() string {
 	return buf.String()
 }
 
-func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
+func (c *Client) blame(ctx context.Context, ps *pairedSessions, sesRun *sessionRun) (err error) {
 	sesRun.logf("running blame assignment")
 
 	mp := c.mixpool
@@ -69,7 +69,7 @@ func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 
 	// Send initial secrets messages from any peers who detected
 	// misbehavior.
-	err = c.sendLocalPeerMsgs(ctx, sesRun, 0)
+	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, 0)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 		}
 		return nil
 	})
-	err = c.sendLocalPeerMsgs(ctx, sesRun, msgRS)
+	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, msgRS)
 	if err != nil {
 		return err
 	}

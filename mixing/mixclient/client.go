@@ -479,7 +479,7 @@ type delayedMsg struct {
 	p        *peer
 }
 
-func (c *Client) sendLocalPeerMsgs(ctx context.Context, d deadlines, s *sessionRun, msgMask uint) error {
+func (c *Client) sendLocalPeerMsgs(ctx context.Context, d *deadlines, s *sessionRun, msgMask uint) error {
 	now := time.Now()
 
 	msgs := make([]delayedMsg, 0, len(s.peers)*bits.OnesCount(msgMask))
@@ -1120,7 +1120,7 @@ func (c *Client) pairSession(ctx context.Context, ps *pairedSessions, prs []*wir
 
 		case errors.Is(err, errTriggeredBlame) || errors.Is(err, mixpool.ErrSecretsRevealed):
 			revealedSecrets = true
-			err := c.blame(ctx, r)
+			err := c.blame(ctx, ps, r)
 			if !errors.As(err, &blamed) {
 				r.logf("Aborting session for failed blame assignment: %v", err)
 				return
@@ -1353,7 +1353,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 	} else {
 		sesRun.freshGen = false
 	}
-	err = c.sendLocalPeerMsgs(ctx, sesRun, msgKE)
+	err = c.sendLocalPeerMsgs(ctx, &ps.deadlines, sesRun, msgKE)
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1565,7 +1565,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
-	err = c.sendLocalPeerMsgs(ctx, sesRun, msgCT)
+	err = c.sendLocalPeerMsgs(ctx, d, sesRun, msgCT)
 	if err != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1656,7 +1656,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		sesRun.logf("blaming %x during run (wrong ciphertext count)", []identity(blamed))
 		return sesRun, blamed
 	}
-	sendErr := c.sendLocalPeerMsgs(ctx, sesRun, msgSR)
+	sendErr := c.sendLocalPeerMsgs(ctx, d, sesRun, msgSR)
 	if sendErr != nil {
 		sesRun.logf("%v", sendErr)
 	}
@@ -1740,7 +1740,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		c.testHook(hookBeforePeerDCPublish, ps, sesRun, p)
 		return nil
 	})
-	sendErr = c.sendLocalPeerMsgs(ctx, sesRun, msgFP|msgDC)
+	sendErr = c.sendLocalPeerMsgs(ctx, d, sesRun, msgFP|msgDC)
 	if sendErr != nil {
 		sesRun.logf("%v", err)
 	}
@@ -1826,7 +1826,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		p.cm = cm
 		return nil
 	})
-	sendErr = c.sendLocalPeerMsgs(ctx, sesRun, msgCM)
+	sendErr = c.sendLocalPeerMsgs(ctx, d, sesRun, msgCM)
 	if sendErr != nil {
 		sesRun.logf("%v", sendErr)
 	}
