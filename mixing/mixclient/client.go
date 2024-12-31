@@ -567,17 +567,11 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 
 	for i := range msgs {
 		m := msgs[i]
-		if sessionCancelled() {
+		select {
+		case <-ctx.Done():
+			sessionCancelled()
 			continue
-		}
-		if err := m.p.ctx.Err(); err != nil {
-			nilPeerMsg(m.p, m.m)
-			errs = append(errs, err)
-			continue
-		}
-		time.Sleep(time.Until(m.sendTime))
-		if sessionCancelled() {
-			continue
+		case <-time.After(time.Until(m.sendTime)):
 		}
 		// TODO: handle send deadline in wallet.SubmitMixMessage.
 		if time.Now().After(m.deadline) {
