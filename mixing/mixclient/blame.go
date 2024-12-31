@@ -20,6 +20,8 @@ import (
 	"github.com/decred/dcrd/wire"
 )
 
+var errBlameFailed = errors.New("blame failed")
+
 // blamedIdentities identifies detected misbehaving peers.
 //
 // If a run returns a blamedIdentities error, these peers are immediately
@@ -140,7 +142,11 @@ func (c *Client) blame(ctx context.Context, sesRun *sessionRun) (err error) {
 			sesRun.logf("blaming %x for false failure accusation", id[:])
 			blamed = append(blamed, *id)
 		}
-		err = blamed
+		if len(blamed) > 0 {
+			err = blamed
+		} else {
+			err = errBlamedFailed
+		}
 	}()
 
 	defer c.mu.Unlock()

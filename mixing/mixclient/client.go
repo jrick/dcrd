@@ -75,7 +75,7 @@ const (
 	msgRS
 )
 
-func blameTimedOut(sesRun *sessionRun, timeoutMessage int) blamedIdentities {
+func blameTimedOut(sesRun *sessionRun, timeoutMessage int) error {
 	var blamed blamedIdentities
 	var stage string
 	for _, p := range sesRun.peers {
@@ -102,8 +102,11 @@ func blameTimedOut(sesRun *sessionRun, timeoutMessage int) blamedIdentities {
 			}
 		}
 	}
-	sesRun.logf("blaming %x during run (%s timeout)", []identity(blamed), stage)
-	return blamed
+	if len(blamed) > 0 {
+		sesRun.logf("blaming %x during run (%s timeout)", []identity(blamed), stage)
+		return blamed
+	}
+	return errBlameFailed
 }
 
 // Wallet signs mix transactions and listens for and broadcasts mixing
