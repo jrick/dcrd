@@ -55,6 +55,7 @@ func expiredPRErr(pr *wire.MsgMixPairReq) error {
 var (
 	errOnlyKEsBroadcasted = errors.New("session ended without mix occurring")
 	errTriggeredBlame     = errors.New("blame required")
+	errSendTimeout        = errors.New("send timeout")
 )
 
 const (
@@ -473,11 +474,12 @@ func (c *Client) forLocalPeers(ctx context.Context, s *sessionRun, f func(p *pee
 
 type delayedMsg struct {
 	t time.Time
+	d time.Time
 	m mixing.Message
 	p *peer
 }
 
-func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask uint) error {
+func (c *Client) sendLocalPeerMsgs(ctx context.Context, d deadlines, s *sessionRun, msgMask uint) error {
 	now := time.Now()
 
 	msgs := make([]delayedMsg, 0, len(s.peers)*bits.OnesCount(msgMask))
@@ -495,30 +497,37 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 			msgMask |= msgRS
 		}
 		if msgMask&msgKE == msgKE && p.ke != nil {
+			msg.d = d.recvKE
 			msg.m = p.ke
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCT == msgCT && p.ct != nil {
+			msg.d = d.recvCT
 			msg.m = p.ct
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgSR == msgSR && p.sr != nil {
+			msg.d = d.recvSR
 			msg.m = p.sr
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgFP == msgFP && p.fp != nil {
+			msg.d = d.recvDC
 			msg.m = p.fp
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgDC == msgDC && p.dc != nil {
+			msg.d = d.recvDC
 			msg.m = p.dc
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgCM == msgCM && p.cm != nil {
+			msg.d = d.recvCM
 			msg.m = p.cm
 			msgs = append(msgs, msg)
 		}
 		if msgMask&msgRS == msgRS && p.rs != nil {
+			msg.d = now.Add(timeoutDuration)
 			msg.m = p.rs
 			msgs = append(msgs, msg)
 		}
@@ -561,6 +570,11 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 			continue
 		}
 		time.Sleep(time.Until(m.t))
+		// TODO: handle send deadline in wallet.SubmitMixMessage.
+		if time.Now().After(m.d) {
+			nilPeerMsg(m.p, m.m)
+			res <- errSendTimeout
+		}
 		qsend := &queueWork{
 			p: m.p,
 			f: func(p *peer) error {
