@@ -546,7 +546,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, s *sessionRun, msgMask u
 		if msgMask&msgCM == msgCM {
 			p.cm = nil
 		}
-		if msgMask&msgRS == msgRS && p.rs != nil {
+		if msgMask&msgRS == msgRS {
 			p.rs = nil
 		}
 	}
