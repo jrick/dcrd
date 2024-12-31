@@ -576,7 +576,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 		}
 		err := m.p.signAndSubmit(m.m)
 		if err != nil {
-			nilPeerMsg(m.p)
+			nilPeerMsg(m.p, m.m)
 		}
 		res <- err
 	}
