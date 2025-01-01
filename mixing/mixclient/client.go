@@ -55,7 +55,6 @@ func expiredPRErr(pr *wire.MsgMixPairReq) error {
 var (
 	errOnlyKEsBroadcasted = errors.New("session ended without mix occurring")
 	errTriggeredBlame     = errors.New("blame required")
-	errSendTimeout        = errors.New("send timeout")
 )
 
 const (
