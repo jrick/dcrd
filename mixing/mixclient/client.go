@@ -551,17 +551,15 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 	errs := make([]error, 0, len(msgs))
 
 	var sessionCancelledState bool
-	sessionCancelled := func() bool {
+	sessionCancelled := func() {
 		if sessionCancelledState {
-			return true
+			return
 		}
 		if err := ctx.Err(); err != nil {
 			err := fmt.Errorf("session cancelled: %w", err)
 			errs = append(errs, err)
 			sessionCancelledState = true
-			return true
 		}
-		return false
 	}
 
 	for i := range msgs {
