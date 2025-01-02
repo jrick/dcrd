@@ -550,15 +550,15 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 
 	errs := make([]error, 0, len(msgs))
 
-	var sessionCancelledState bool
-	sessionCancelled := func() {
-		if sessionCancelledState {
+	var sessionCanceledState bool
+	sessionCanceled := func() {
+		if sessionCanceledState {
 			return
 		}
 		if err := ctx.Err(); err != nil {
 			err := fmt.Errorf("session cancelled: %w", err)
 			errs = append(errs, err)
-			sessionCancelledState = true
+			sessionCanceledState = true
 		}
 	}
 
@@ -566,7 +566,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 		m := msgs[i]
 		select {
 		case <-ctx.Done():
-			sessionCancelled()
+			sessionCanceled()
 			continue
 		case <-time.After(time.Until(m.sendTime)):
 		}
