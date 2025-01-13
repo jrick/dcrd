@@ -3,13 +3,15 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package blockchain
+package standalone
 
 import (
 	"math"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/decred/slog"
 )
 
 const (
@@ -48,29 +50,6 @@ type MedianTimeSource interface {
 	Offset() time.Duration
 }
 
-// int64Sorter implements sort.Interface to allow a slice of 64-bit integers to
-// be sorted.
-type int64Sorter []int64
-
-// Len returns the number of 64-bit integers in the slice.  It is part of the
-// sort.Interface implementation.
-func (s int64Sorter) Len() int {
-	return len(s)
-}
-
-// Swap swaps the 64-bit integers at the passed indices.  It is part of the
-// sort.Interface implementation.
-func (s int64Sorter) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-// Less returns whether the 64-bit integer with index i should sort before the
-// 64-bit integer with index j.  It is part of the sort.Interface
-// implementation.
-func (s int64Sorter) Less(i, j int) bool {
-	return s[i] < s[j]
-}
-
 // medianTime provides an implementation of the MedianTimeSource interface.
 // It is limited to maxMedianTimeEntries includes the same buggy behavior as
 // the time offset mechanism in Bitcoin Core.  This is necessary because it is
@@ -81,6 +60,7 @@ type medianTime struct {
 	offsets            []int64
 	offsetSecs         int64
 	invalidTimeChecked bool
+	log                slog.Logger
 }
 
 // Ensure the medianTime type implements the MedianTimeSource interface.
@@ -132,10 +112,12 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 	// Sort the offsets so the median can be obtained as needed later.
 	sortedOffsets := make([]int64, numOffsets)
 	copy(sortedOffsets, m.offsets)
-	sort.Sort(int64Sorter(sortedOffsets))
+	sort.Slice(sortedOffsets, func(i, j int) bool {
+		return sortedOffsets[i] < sortedOffsets[j]
+	})
 
 	offsetDuration := time.Duration(offsetSecs) * time.Second
-	log.Debugf("Added time sample of %v (total: %v)", offsetDuration,
+	m.log.Debugf("Added time sample of %v (total: %v)", offsetDuration,
 		numOffsets)
 
 	// NOTE: The following code intentionally has a bug to mirror the
@@ -183,7 +165,7 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 
 			// Warn if none of the time samples are close.
 			if !remoteHasCloseTime {
-				log.Warnf("Please check your date and time " +
+				m.log.Warnf("Please check your date and time " +
 					"are correct!  dcrd will not work " +
 					"properly with an invalid time")
 			}
@@ -191,7 +173,7 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 	}
 
 	medianDuration := time.Duration(m.offsetSecs) * time.Second
-	log.Debugf("New time offset: %v", medianDuration)
+	m.log.Debugf("New time offset: %v", medianDuration)
 }
 
 // Offset returns the number of seconds to adjust the local clock based upon the
@@ -211,9 +193,10 @@ func (m *medianTime) Offset() time.Duration {
 // rules necessary for proper time handling in the chain consensus rules and
 // expects the time samples to be added from the timestamp field of the version
 // message received from remote peers that successfully connect and negotiate.
-func NewMedianTime() MedianTimeSource {
+func NewMedianTime(log slog.Logger) MedianTimeSource {
 	return &medianTime{
 		knownIDs: make(map[string]struct{}),
 		offsets:  make([]int64, 0, maxMedianTimeEntries),
+		log:      log,
 	}
 }

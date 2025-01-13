@@ -212,6 +212,10 @@ type BlockChain interface {
 
 	// CurrentTip returns the hash and height of the current tip block.
 	CurrentTip() (chainhash.Hash, int64)
+
+	// MedianTimeSource returns a time source providing the median network
+	// time.
+	MedianTimeSource() mixing.MedianTimeSource
 }
 
 // newRecentMixMsgsCache returns a new LRU cache for tracking mix messages that
@@ -392,10 +396,19 @@ func (p *Pool) ExpireMessagesInBackground(height uint32) {
 	}
 }
 
+// now returns the current machine time adjusted by a whole number of seconds
+// based on the median of time samples collected by peers.
+//
+// now is not monotonic.
+func (p *Pool) now() time.Time {
+	offset := p.blockchain.MedianTimeSource().Offset()
+	return time.Now().Add(offset).UTC()
+}
+
 // waitForExpiry blocks for at least one full epoch, waiting until two epoch
 // ticks from now.
 func (p *Pool) waitForExpiry() {
-	now := time.Now().UTC()
+	now := p.now()
 	epoch := now.Truncate(p.epoch).Add(2 * p.epoch)
 	duration := epoch.Sub(now)
 	time.Sleep(duration)
@@ -1484,7 +1497,7 @@ func (p *Pool) checkAcceptKE(ke *wire.MsgMixKeyExchange) error {
 		return ruleError(ErrPeerPositionOutOfBounds)
 	}
 
-	now := time.Now()
+	now := p.now()
 	keEpoch := time.Unix(int64(ke.Epoch), 0)
 	if now.Add(earlyKEDuration).Before(keEpoch) {
 		err := fmt.Errorf("KE received too early for stated epoch")

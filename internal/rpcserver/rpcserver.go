@@ -6081,7 +6081,7 @@ type Config struct {
 
 	// These fields allow the RPC server to interface with the local block
 	// chain data and state.
-	TimeSource    blockchain.MedianTimeSource
+	TimeSource    standalone.MedianTimeSource
 	Chain         Chain
 	SanityChecker SanityChecker
 	ChainParams   *chaincfg.Params

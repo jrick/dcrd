@@ -1438,7 +1438,7 @@ func newMiningHarness(chainParams *chaincfg.Params) (*miningHarness, []spendable
 		generator: NewBlkTmplGenerator(&Config{
 			Policy:                     policy,
 			TxSource:                   txSource,
-			TimeSource:                 blockchain.NewMedianTime(),
+			TimeSource:                 standalone.NewMedianTime(log),
 			SubsidyCache:               subsidyCache,
 			ChainParams:                chainParams,
 			MiningTimeOffset:           0,

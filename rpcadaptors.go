@@ -11,6 +11,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/connmgr/v3"
@@ -542,7 +543,7 @@ func (*rpcLogManager) ParseAndSetDebugLevels(debugLevel string) error {
 // implements the rpcserver.SanityChecker interface.
 type rpcSanityChecker struct {
 	chain       *blockchain.BlockChain
-	timeSource  blockchain.MedianTimeSource
+	timeSource  standalone.MedianTimeSource
 	chainParams *chaincfg.Params
 }
 

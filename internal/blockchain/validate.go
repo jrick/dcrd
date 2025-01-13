@@ -741,7 +741,8 @@ func checkProofOfWorkSanity(header *wire.BlockHeader, powLimit *big.Int, flags B
 //
 // The flags do not modify the behavior of this function directly, however they
 // are needed to pass along to checkProofOfWorkSanity.
-func checkBlockHeaderSanity(header *wire.BlockHeader, timeSource MedianTimeSource, flags BehaviorFlags, chainParams *chaincfg.Params) error {
+func checkBlockHeaderSanity(header *wire.BlockHeader, timeSource standalone.MedianTimeSource,
+	flags BehaviorFlags, chainParams *chaincfg.Params) error {
 	// The stake validation height should always be at least stake enabled
 	// height, so assert it because the code below relies on that assumption.
 	stakeValidationHeight := uint32(chainParams.StakeValidationHeight)
@@ -857,7 +858,7 @@ func checkBlockHeaderSanity(header *wire.BlockHeader, timeSource MedianTimeSourc
 //
 // The flags do not modify the behavior of this function directly, however they
 // are needed to pass along to checkBlockHeaderSanity.
-func checkBlockSanity(block *dcrutil.Block, timeSource MedianTimeSource, flags BehaviorFlags, chainParams *chaincfg.Params) error {
+func checkBlockSanity(block *dcrutil.Block, timeSource standalone.MedianTimeSource, flags BehaviorFlags, chainParams *chaincfg.Params) error {
 	msgBlock := block.MsgBlock()
 	header := &msgBlock.Header
 	err := checkBlockHeaderSanity(header, timeSource, flags, chainParams)
@@ -957,7 +958,7 @@ func checkBlockSanity(block *dcrutil.Block, timeSource MedianTimeSource, flags B
 // CheckBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context
 // free.
-func CheckBlockSanity(block *dcrutil.Block, timeSource MedianTimeSource, chainParams *chaincfg.Params) error {
+func CheckBlockSanity(block *dcrutil.Block, timeSource standalone.MedianTimeSource, chainParams *chaincfg.Params) error {
 	return checkBlockSanity(block, timeSource, BFNone, chainParams)
 }
 

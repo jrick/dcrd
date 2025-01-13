@@ -172,7 +172,7 @@ type BlockChain struct {
 	db                       database.DB
 	dbInfo                   *databaseInfo
 	chainParams              *chaincfg.Params
-	timeSource               MedianTimeSource
+	timeSource               standalone.MedianTimeSource
 	notifications            NotificationCallback
 	sigCache                 *txscript.SigCache
 	indexSubscriber          *indexers.IndexSubscriber
@@ -2323,7 +2323,7 @@ type Config struct {
 	// The caller is expected to keep a reference to the time source as well
 	// and add time samples from other peers on the network so the local
 	// time is adjusted to be in agreement with other peers.
-	TimeSource MedianTimeSource
+	TimeSource standalone.MedianTimeSource
 
 	// Notifications defines a callback to which notifications will be sent
 	// when various events take place.  See the documentation for

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/decred/dcrd/blockchain/stake/v5"
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/blockchain/v5/chaingen"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
@@ -152,7 +153,7 @@ func chainSetup(t testing.TB, params *chaincfg.Params) (*BlockChain, error) {
 			DB:          db,
 			UtxoBackend: utxoBackend,
 			ChainParams: &paramsCopy,
-			TimeSource:  NewMedianTime(),
+			TimeSource:  standalone.NewMedianTime(log),
 			SigCache:    sigCache,
 			UtxoCache: NewUtxoCache(&UtxoCacheConfig{
 				Backend: utxoBackend,

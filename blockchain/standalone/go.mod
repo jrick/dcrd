@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/decred/dcrd/chaincfg/chainhash v1.0.4
 	github.com/decred/dcrd/wire v1.7.0
+	github.com/decred/slog v1.2.0
 )
 
 require (

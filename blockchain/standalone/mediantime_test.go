@@ -3,12 +3,14 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package blockchain
+package standalone
 
 import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/decred/slog"
 )
 
 // TestMedianTime tests the medianTime implementation.
@@ -58,7 +60,7 @@ func TestMedianTime(t *testing.T) {
 	defer func() { maxMedianTimeEntries = 200 }()
 
 	for i, test := range tests {
-		filter := NewMedianTime()
+		filter := NewMedianTime(slog.Disabled)
 		for j, offset := range test.in {
 			id := strconv.Itoa(j)
 			now := time.Unix(time.Now().Unix(), 0)

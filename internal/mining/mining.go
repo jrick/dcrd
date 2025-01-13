@@ -50,7 +50,7 @@ type Config struct {
 	// TimeSource defines the median time source which is used to retrieve the
 	// current time adjusted by the median time offset.  This is used when setting
 	// the timestamp in the header of new blocks.
-	TimeSource blockchain.MedianTimeSource
+	TimeSource standalone.MedianTimeSource
 
 	// SubsidyCache defines a subsidy cache to use when calculating and validating
 	// block and vote subsidies.

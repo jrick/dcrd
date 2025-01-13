@@ -604,7 +604,7 @@ type server struct {
 	broadcast            chan broadcastMsg
 	nat                  *upnpNAT
 	db                   database.DB
-	timeSource           blockchain.MedianTimeSource
+	timeSource           standalone.MedianTimeSource
 	services             wire.ServiceFlag
 	quit                 chan struct{}
 
@@ -3877,7 +3877,7 @@ func newServer(ctx context.Context, profiler *profileServer,
 		modifyRebroadcastInv: make(chan interface{}),
 		nat:                  nat,
 		db:                   db,
-		timeSource:           blockchain.NewMedianTime(),
+		timeSource:           standalone.NewMedianTime(chanLog),
 		services:             services,
 		sigCache:             sigCache,
 		subsidyCache:         standalone.NewSubsidyCache(chainParams),

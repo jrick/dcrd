@@ -136,6 +136,10 @@ type Wallet interface {
 	// PublishTransaction adds the transaction to the wallet and publishes
 	// it to the network.
 	PublishTransaction(ctx context.Context, tx *wire.MsgTx) error
+
+	// MedianTimeSource returns a time source providing the median network
+	// time.
+	MedianTimeSource() mixing.MedianTimeSource
 }
 
 type deadlines struct {
@@ -351,6 +355,10 @@ type Client struct {
 
 	epoch time.Duration
 
+	lastNow     time.Time
+	lastNowWall time.Time
+	lastNowMu   sync.Mutex
+
 	logger slog.Logger
 
 	testTickC chan struct{}
@@ -473,6 +481,29 @@ func (c *Client) forLocalPeers(ctx context.Context, s *sessionRun, f func(p *pee
 	return errors.Join(errs...)
 }
 
+// now returns the current machine time adjusted by a whole number of seconds
+// based on the median of time samples collected by peers.
+//
+// now is monotonic; if the median network time offset has decreased since a
+// previous call to now, and the adjusted time is before or equal to the
+// previous returned time, now returns the previously-returned value plus
+// half of the real clock difference between the two now invocations.
+func (c *Client) now() time.Time {
+	offset := c.wallet.MedianTimeSource().Offset()
+	wall := time.Now()
+	adjustedTime := wall.Add(offset).UTC()
+
+	c.lastNowMu.Lock()
+	if !adjustedTime.After(c.lastNow) {
+		adjustedTime = c.lastNow.Add(wall.Sub(c.lastNowWall) / 2)
+	}
+	c.lastNow = adjustedTime
+	c.lastNowWall = wall
+	c.lastNowMu.Unlock()
+
+	return adjustedTime
+}
+
 type delayedMsg struct {
 	sendTime time.Time
 	deadline time.Time
@@ -481,7 +512,7 @@ type delayedMsg struct {
 }
 
 func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *sessionRun, msgMask uint) error {
-	now := time.Now()
+	now := c.now()
 
 	msgs := make([]delayedMsg, 0, len(s.peers)*bits.OnesCount(msgMask))
 	for _, p := range s.peers {
@@ -585,7 +616,7 @@ func (c *Client) sendLocalPeerMsgs(ctx context.Context, deadline time.Time, s *s
 // cancelled early.  Returns the calculated epoch for stage timeout
 // calculations.
 func (c *Client) waitForEpoch(ctx context.Context) (time.Time, error) {
-	now := time.Now().UTC()
+	now := c.now()
 	epoch := now.Truncate(c.epoch).Add(c.epoch)
 	duration := epoch.Sub(now)
 	timer := time.NewTimer(duration)
@@ -614,7 +645,7 @@ func (p *peer) msgJitter() time.Duration {
 // small amount of jitter is added to help avoid timing deanonymization
 // attacks.
 func (c *Client) prDelay(ctx context.Context, p *peer) error {
-	now := time.Now().UTC()
+	now := c.now()
 	epoch := now.Truncate(c.epoch).Add(c.epoch)
 	sendBefore := epoch.Add(-timeoutDuration - maxJitter)
 	sendAfter := epoch.Add(timeoutDuration)
@@ -1398,7 +1429,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		// goroutine started by the epoch ticker, possibly with
 		// additional PRs.
 		nextEpoch := ps.epoch.Add(c.epoch)
-		if time.Now().Add(timeoutDuration).After(nextEpoch) {
+		if c.now().Add(timeoutDuration).After(nextEpoch) {
 			c.logf("Aborting session %x after %d attempts",
 				sesRun.sid[:], len(ps.runs))
 			return sesRun, errOnlyKEsBroadcasted

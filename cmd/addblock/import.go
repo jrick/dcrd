@@ -14,12 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/database/v3"
 	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/dcrd/internal/blockchain"
 	"github.com/decred/dcrd/internal/blockchain/indexers"
 	"github.com/decred/dcrd/wire"
+	"github.com/decred/slog"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -323,7 +325,7 @@ func newBlockImporter(ctx context.Context, db database.DB, utxoDb *leveldb.DB, r
 		&blockchain.Config{
 			DB:              db,
 			ChainParams:     activeNetParams,
-			TimeSource:      blockchain.NewMedianTime(),
+			TimeSource:      standalone.NewMedianTime(slog.Disabled),
 			IndexSubscriber: subber,
 			UtxoBackend:     blockchain.NewLevelDbUtxoBackend(utxoDb),
 			UtxoCache:       utxoCache,

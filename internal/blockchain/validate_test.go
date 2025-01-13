@@ -267,7 +267,7 @@ func quickVoteActivationParams() *chaincfg.Params {
 // not on a chain.
 func TestCheckBlockSanity(t *testing.T) {
 	params := chaincfg.RegNetParams()
-	timeSource := NewMedianTime()
+	timeSource := standalone.NewMedianTime(log)
 	block := dcrutil.NewBlock(&badBlock)
 	err := CheckBlockSanity(block, timeSource, params)
 	if err == nil {
@@ -301,7 +301,7 @@ func TestCheckBlockHeaderContext(t *testing.T) {
 			DB:          db,
 			UtxoBackend: utxoBackend,
 			ChainParams: params,
-			TimeSource:  NewMedianTime(),
+			TimeSource:  standalone.NewMedianTime(log),
 			UtxoCache: NewUtxoCache(&UtxoCacheConfig{
 				Backend: utxoBackend,
 				FlushBlockDB: func() error {

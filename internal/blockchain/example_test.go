@@ -11,11 +11,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/database/v3"
 	_ "github.com/decred/dcrd/database/v3/ffldb"
 	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/dcrd/internal/blockchain"
+	"github.com/decred/slog"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -70,7 +72,7 @@ func ExampleBlockChain_ProcessBlock() {
 		&blockchain.Config{
 			DB:          db,
 			ChainParams: mainNetParams,
-			TimeSource:  blockchain.NewMedianTime(),
+			TimeSource:  standalone.NewMedianTime(slog.Disabled),
 			UtxoCache: blockchain.NewUtxoCache(&blockchain.UtxoCacheConfig{
 				Backend: blockchain.NewLevelDbUtxoBackend(utxoDb),
 				FlushBlockDB: func() error {

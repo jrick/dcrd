@@ -1862,7 +1862,7 @@ func defaultMockConfig(chainParams *chaincfg.Params) *Config {
 		Clock:           &testClock{},
 		LogManager:      defaultMockLogManager(),
 		FiltererV2:      defaultMockFiltererV2(),
-		TimeSource:      blockchain.NewMedianTime(),
+		TimeSource:      standalone.NewMedianTime(log),
 		Services:        wire.SFNodeNetwork | wire.SFNodeCF,
 		SubsidyCache:    standalone.NewSubsidyCache(chainParams),
 		NetInfo: []types.NetworksResult{{

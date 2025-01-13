@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/decred/dcrd/blockchain/stake/v5"
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/container/apbf"
@@ -2138,7 +2139,7 @@ type Config struct {
 
 	// TimeSource defines the median time source which is used to retrieve the
 	// current time adjusted by the median time offset.
-	TimeSource blockchain.MedianTimeSource
+	TimeSource standalone.MedianTimeSource
 
 	// TxMemPool specifies the mempool to use for processing transactions.
 	TxMemPool *mempool.TxPool

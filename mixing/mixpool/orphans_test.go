@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/crypto/blake256"
 	"github.com/decred/dcrd/mixing"
 	"github.com/decred/dcrd/wire"
+	"github.com/decred/slog"
 )
 
 var (
@@ -24,10 +26,14 @@ var (
 
 var testnetParams = chaincfg.TestNet3Params()
 
-type testBlockchain struct{}
+type testBlockchain struct {
+	medianTime standalone.MedianTimeSource
+}
 
 func newTestBlockchain() *testBlockchain {
-	return &testBlockchain{}
+	return &testBlockchain{
+		medianTime: standalone.NewMedianTime(slog.Disabled),
+	}
 }
 
 func (b *testBlockchain) CurrentTip() (chainhash.Hash, int64) {
@@ -36,6 +42,10 @@ func (b *testBlockchain) CurrentTip() (chainhash.Hash, int64) {
 
 func (b *testBlockchain) ChainParams() *chaincfg.Params {
 	return testnetParams
+}
+
+func (b *testBlockchain) MedianTimeSource() mixing.MedianTimeSource {
+	return b.medianTime
 }
 
 // Intentionally create orphans and test their acceptance behavior when PRs

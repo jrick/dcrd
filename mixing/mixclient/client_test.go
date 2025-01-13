@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"decred.org/cspp/v2/solverrpc"
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/dcrec"
@@ -54,12 +55,14 @@ var testnetParams = chaincfg.TestNet3Params()
 
 type testBlockchain struct {
 	publishedTxs map[chainhash.Hash]*wire.MsgTx
+	medianTime   standalone.MedianTimeSource
 	mu           sync.Mutex
 }
 
 func newTestBlockchain() *testBlockchain {
 	return &testBlockchain{
 		publishedTxs: make(map[chainhash.Hash]*wire.MsgTx),
+		medianTime:   standalone.NewMedianTime(slog.Disabled),
 	}
 }
 
@@ -69,6 +72,10 @@ func (b *testBlockchain) CurrentTip() (chainhash.Hash, int64) {
 
 func (b *testBlockchain) ChainParams() *chaincfg.Params {
 	return testnetParams
+}
+
+func (b *testBlockchain) MedianTimeSource() mixing.MedianTimeSource {
+	return b.medianTime
 }
 
 type testWallet struct {
@@ -171,6 +178,10 @@ func (w *testWallet) privForHash160(hash160 [20]byte) *secp256k1.PrivateKey {
 func (w *testWallet) privForPkScript(p2pkhScript []byte) *secp256k1.PrivateKey {
 	hash160 := *(*[20]byte)(p2pkhScript[3:23])
 	return w.privForHash160(hash160)
+}
+
+func (w *testWallet) MedianTimeSource() mixing.MedianTimeSource {
+	return w.blockchain.medianTime
 }
 
 func TestHonest(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 
 	"decred.org/cspp/v2/solverrpc"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/decred/dcrd/blockchain/standalone/v2"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
 	"github.com/decred/dcrd/crypto/blake256"
@@ -28,6 +29,7 @@ import (
 	"github.com/decred/dcrd/txscript/v4"
 	"github.com/decred/dcrd/txscript/v4/stdaddr"
 	"github.com/decred/dcrd/wire"
+	"github.com/decred/slog"
 )
 
 var params = chaincfg.SimNetParams()
@@ -162,8 +164,9 @@ func makeMockUTXOs(rand io.Reader) map[string]*mockUTXO {
 }
 
 type fakechain struct {
-	hash   chainhash.Hash
-	height int64
+	hash       chainhash.Hash
+	height     int64
+	medianTime standalone.MedianTimeSource
 }
 
 func (c *fakechain) ChainParams() *chaincfg.Params {
@@ -182,12 +185,17 @@ func (c *fakechain) FetchUtxoEntry(op wire.OutPoint) (UtxoEntry, error) {
 	return entry, nil
 }
 
+func (c *fakechain) MedianTimeSource() mixing.MedianTimeSource {
+	return c.medianTime
+}
+
 func TestAccept(t *testing.T) {
 	t.Parallel()
 	testRand := testPRNG(t)
 
 	c := new(fakechain)
 	c.height = 1000
+	c.medianTime = standalone.NewMedianTime(slog.Disabled)
 	p := NewPool(c)
 
 	identityPub, identityPriv, err := generateSecp256k1(testRand)
