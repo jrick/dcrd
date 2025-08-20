@@ -1375,6 +1375,7 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		return nil
 	})
 	if err != nil {
+		panic(err)
 		return sesRun, err
 	}
 	sesRun.freshGen = false
