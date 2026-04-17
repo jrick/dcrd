@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"math/bits"
 	"runtime"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -906,24 +907,26 @@ func (c *Client) epochTicker(ctx context.Context) error {
 
 		c.mu.Lock()
 
-		// XXX: This needs a better solution; it may remove runs that have
-		// all confirm messages but with invalid signatures.  This eventually
-		// results in "expired PR" errors.
-		// Ideally, we would behave like dcrd and only remove sessions that have
-		// mined mix transactions or are otherwise double spent in a block.
+		// Remove mixpool messages from completed mixes and any
+		// expired messages.
 		c.mixpool.RemoveConfirmedSessions()
 		c.expireMessages()
 
 		for _, p := range c.pendingPairings {
-			prs := c.mixpool.CompatiblePRs(p.pairing)
+			origPRs := c.mixpool.CompatiblePRs(p.pairing)
 
 			// Exclude identities who have timed out too many
 			// times.
-			prs = c.observer.ExcludePRs(prs)
+			prs := c.observer.ExcludePRs(slices.Clone(origPRs))
 
 			prsMap := make(map[identity]struct{})
 			for _, pr := range prs {
 				prsMap[pr.Identity] = struct{}{}
+			}
+
+			origPRsMap := make(map[identity]struct{})
+			for _, pr := range origPRs {
+				origPRsMap[pr.Identity] = struct{}{}
 			}
 
 			// Clone the pending peers map, only including peers
@@ -936,6 +939,9 @@ func (c *Client) epochTicker(ctx context.Context) error {
 			for id, peer := range p.localPeers {
 				if _, ok := prsMap[id]; ok {
 					localPeers[id] = peer.cloneLocalPeer(false)
+				} else if _, ok := origPRsMap[id]; ok {
+					prHash := peer.pr.Hash()
+					c.logerrf("Greylisting excluded own PR %x by %x", prHash[:], id[:])
 				}
 			}
 
