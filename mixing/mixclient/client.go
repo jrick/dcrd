@@ -953,6 +953,20 @@ func (c *Client) epochTicker(ctx context.Context) error {
 			c.logf("Have %d compatible/%d local PRs waiting for pairing %x",
 				len(prs), len(localPeers), p.pairing)
 
+			// Limit the total peers/PR count that will be used
+			// for session forming to the maximum allowed in a
+			// single session.
+			if len(prs) > mixing.MaxPeers {
+				// Pseudo-randomize the PR order to avoid
+				// always taking the first PRs
+				// (legicographicaly sorted by hash).
+				mixing.SortPRsForSession(prs, uint64(epoch.Unix()))
+				prs = prs[:mixing.MaxPeers]
+				for _, pr := range prs[mixing.MaxPeers:] {
+					delete(localPeers, pr.Identity)
+				}
+			}
+
 			// pairSession calls pairingWG.Done once the session
 			// is formed and the selected peers have been removed
 			// from then pending pairing.
@@ -1598,10 +1612,6 @@ func (c *Client) run(ctx context.Context, ps *pairedSessions) (sesRun *sessionRu
 		var mtot uint32
 		var cjSize coinjoinSize
 		for _, pr := range sesRun.prs {
-			if npeers+1 > mixing.MaxPeers {
-				sizeExcluded = append(sizeExcluded, pr)
-				continue
-			}
 			if mtot+pr.MessageCount > mixing.MaxMtot {
 				sizeExcluded = append(sizeExcluded, pr)
 				continue
