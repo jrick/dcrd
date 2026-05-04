@@ -685,6 +685,10 @@ func (p *Pool) RemoveConfirmedSessions() {
 
 func (p *Pool) removeConfirmedSessions() {
 	for sid, ses := range p.sessions {
+		if ses.countFor(msgtypeRS) != 0 {
+			continue
+		}
+
 		cmCount := ses.countFor(msgtypeCM)
 		if uint32(len(ses.prs)) != cmCount {
 			continue

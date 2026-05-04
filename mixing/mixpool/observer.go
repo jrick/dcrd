@@ -152,10 +152,11 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 	// completed maps only completed session IDs -> KEs.
 	pairings := make(map[string]map[chainhash.Hash][]*wire.MsgMixKeyExchange)
 	completed := make(map[chainhash.Hash][]*wire.MsgMixKeyExchange)
+	completedPeers := make(map[idPubKey]struct{})
 	prByKE := make(map[chainhash.Hash]*wire.MsgMixPairReq)
-	timedOut := make(map[string]map[idPubKey]struct{})
 	active := o.mixpool.activeInEpoch(prevEpoch)
-	sizeLimited := make(map[idPubKey]string)
+	misbehaving := make(map[idPubKey]activePeer)
+	blamedPairings := make(map[string]map[idPubKey]struct{})
 	for _, a := range active {
 		pairing, err := a.pr.Pairing()
 		if err != nil {
@@ -204,31 +205,36 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 			}
 			_ = o.mixpool.Receive(cancelledCtx, r)
 
-			// When no ciphertext messages were received, a
-			// session was not formed, and timeout can not be
-			// observed.
-			//
-			// As this occurs when sessions exceeding the mix
-			// limits are recreated, mark all peers in this
-			// session as potentially limited, so they can be
-			// removed from the active map later.
-			if len(r.CTs) == 0 {
-				for _, ke := range sesKEs {
-					sizeLimited[ke.Identity] = pairing
-				}
-
+			// When not all KE or no CT messages were received, an
+			// active session was not formed, and timeout can not
+			// be observed.
+			if len(sesKEs[0].SeenPRs) != len(sesKEs) || len(r.CTs) == 0 {
 				continue
 			}
 
 			// If secrets were revealed, then clients would have
-			// blamed peers for non-timeout misbehavior, which is
-			// out of scope for this observer.
+			// blamed peers for non-timeout misbehavior.  Mark all
+			// peers involved in this blamed session, so that if a
+			// confirmed mix also occured for the same pairing,
+			// the peers that were excluded after revealing
+			// secrets can be flagged for misbehavior.
 			if len(r.RSs) > 0 {
+				bp := blamedPairings[pairing]
+				if bp == nil {
+					bp = make(map[idPubKey]struct{})
+					blamedPairings[pairing] = bp
+				}
+				for _, ke := range sesKEs {
+					bp[ke.Identity] = struct{}{}
+				}
 				continue
 			}
 
 			if len(r.CMs) == len(sesKEs) {
 				completed[sid] = sesKEs
+				for _, ke := range sesKEs {
+					completedPeers[ke.Identity] = struct{}{}
+				}
 				continue
 			}
 
@@ -237,16 +243,11 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 			// may have intentionally timed out.  Don't blame peers if all
 			// messages are missing, as there is no evidence that only a
 			// subset of the peers timed out.
-			if len(sesKEs[0].SeenPRs) != len(sesKEs) {
-				continue
-			}
 			ids := make(map[idPubKey]struct{})
 			for _, ke := range sesKEs {
 				ids[ke.Identity] = struct{}{}
 			}
 			switch {
-			case len(r.CTs) == 0:
-				continue
 			case len(r.CTs) < len(sesKEs):
 				for _, ct := range r.CTs {
 					delete(ids, ct.Identity)
@@ -270,71 +271,29 @@ func (o *Observer) checkPrevEpoch(cancelledCtx context.Context, prevEpoch uint64
 					delete(ids, cm.Identity)
 				}
 			}
-			if _, ok := timedOut[pairing]; !ok {
-				timedOut[pairing] = make(map[idPubKey]struct{})
-			}
 			for id := range ids {
-				timedOut[pairing][id] = struct{}{}
+				misbehaving[id] = active[id]
 			}
 		}
 	}
 
-	// Modify the active map by removing identities that were
-	// included in a completed mix.  Those remaining who sent key
-	// exchange messages but who (for any reason) were not
-	// included in a completed mix are assumed to be misbehaving
-	// and trying to disrupt mixing, and restrictions on their
-	// submitted UTXOs will be put in place after too many
-	// violations.
-	// This loop also records the completed pairings for all
-	// completed sessions.
-	completedPairings := make(map[string]struct{})
-	for _, kes := range completed {
-		for _, ke := range kes {
-			delete(active, ke.Identity)
-		}
-		pairing, err := prByKE[kes[0].Hash()].Pairing()
+	// Mark all peers as misbehaving who appear in sessions that ended in
+	// revealing secrets when a later session for the same pairing
+	// resulted in a completed mix without them.
+	for _, sesKEs := range completed {
+		pairing, err := active[sesKEs[0].Identity].pr.Pairing()
 		if err != nil {
-			return err
+			log.Errorf("Pairing marshaling failed: %v", err)
+			continue
 		}
-		completedPairings[string(pairing)] = struct{}{}
-	}
-
-	// Modify the active map by removing identities when no
-	// successful mix occurred for the pairing.  If any peers
-	// timed out for the pairing, do not exclude them from the
-	// misbehaving peer set.
-	for id, ap := range active {
-		// Active peers will always have at least one KE, and
-		// all KEs must be for the same pairing type.
-		pairing, err := prByKE[ap.kes[0].Hash()].Pairing()
-		if err != nil {
-			return err
-		}
-		if _, ok := completedPairings[string(pairing)]; !ok {
-			if timedOutIDs, ok := timedOut[string(pairing)]; ok {
-				if _, ok := timedOutIDs[id]; ok {
-					continue
-				}
-			}
-			delete(active, id)
-		}
-	}
-
-	// Modify the active map by removing identities that were in abandoned
-	// sessions exceeding the mix limits.  If any of these peers also
-	// timed out in another session, do not exclude them from the
-	// misbehaving peer set.
-	for id, pairing := range sizeLimited {
-		if timedOutIDs, ok := timedOut[pairing]; ok {
-			if _, ok := timedOutIDs[id]; ok {
-				continue
+		for id := range blamedPairings[string(pairing)] {
+			if _, ok := completedPeers[id]; !ok {
+				misbehaving[id] = active[id]
 			}
 		}
-		delete(active, id)
 	}
 
-	o.updateStrikes(prevEpoch, active, prByKE, completed)
+	o.updateStrikes(prevEpoch, misbehaving, prByKE, completed)
 
 	return nil
 }
